@@ -1,10 +1,11 @@
-import { Switch, Route, Router as WouterRouter } from "wouter";
+import { useEffect } from "react";
+import { Switch, Route, Router as WouterRouter, useLocation } from "wouter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { AuthProvider } from "@/hooks/use-auth";
-import { AuthGuard } from "@/components/layout/AuthGuard";
+import { AuthProvider, useAuth } from "@/hooks/use-auth";
 import { AppLayout } from "@/components/layout/AppLayout";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 import NotFound from "@/pages/not-found";
 
 import Login from "@/pages/login";
@@ -36,19 +37,39 @@ const queryClient = new QueryClient({
 });
 
 function Router() {
+  const { user, isLoading } = useAuth();
+  const [location, setLocation] = useLocation();
+
+  useEffect(() => {
+    if (!isLoading && !user && location !== "/login") {
+      setLocation("/login");
+    }
+    if (!isLoading && user && location === "/login") {
+      setLocation("/");
+    }
+  }, [isLoading, user, location, setLocation]);
+
+  if (isLoading) {
+    return (
+      <div className="min-h-[100dvh] flex items-center justify-center bg-background">
+        <div className="flex flex-col items-center gap-3">
+          <div className="animate-spin rounded-full h-10 w-10 border-2 border-primary border-t-transparent"></div>
+          <p className="text-sm text-muted-foreground">Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return <Login />;
+  }
+
   return (
     <Switch>
-      <Route path="/login" component={Login} />
-      
-      <Route path="/pos">
-        <AuthGuard>
-          <POS />
-        </AuthGuard>
-      </Route>
-
+      <Route path="/pos" component={POS} />
       <Route path="/:rest*">
-        <AuthGuard>
-          <AppLayout>
+        <AppLayout>
+          <ErrorBoundary>
             <Switch>
               <Route path="/" component={Dashboard} />
               <Route path="/products" component={Products} />
@@ -68,8 +89,8 @@ function Router() {
               <Route path="/settings" component={Settings} />
               <Route component={NotFound} />
             </Switch>
-          </AppLayout>
-        </AuthGuard>
+          </ErrorBoundary>
+        </AppLayout>
       </Route>
     </Switch>
   );
@@ -77,16 +98,18 @@ function Router() {
 
 function App() {
   return (
-    <QueryClientProvider client={queryClient}>
-      <TooltipProvider>
-        <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
-          <AuthProvider>
-            <Router />
-          </AuthProvider>
-        </WouterRouter>
-        <Toaster />
-      </TooltipProvider>
-    </QueryClientProvider>
+    <ErrorBoundary>
+      <QueryClientProvider client={queryClient}>
+        <TooltipProvider>
+          <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
+            <AuthProvider>
+              <Router />
+            </AuthProvider>
+          </WouterRouter>
+          <Toaster />
+        </TooltipProvider>
+      </QueryClientProvider>
+    </ErrorBoundary>
   );
 }
 

@@ -1,20 +1,30 @@
-import React from "react";
+import React, { useEffect } from "react";
 import { useAuth } from "@/hooks/use-auth";
-import { Redirect } from "wouter";
+import { useLocation } from "wouter";
 
 export function AuthGuard({ children }: { children: React.ReactNode }) {
   const { user, isLoading } = useAuth();
+  const [, setLocation] = useLocation();
+
+  useEffect(() => {
+    if (!isLoading && !user) {
+      setLocation("/login");
+    }
+  }, [isLoading, user, setLocation]);
 
   if (isLoading) {
     return (
       <div className="min-h-[100dvh] flex items-center justify-center bg-background">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
+        <div className="flex flex-col items-center gap-3">
+          <div className="animate-spin rounded-full h-10 w-10 border-2 border-primary border-t-transparent"></div>
+          <p className="text-sm text-muted-foreground">Loading...</p>
+        </div>
       </div>
     );
   }
 
   if (!user) {
-    return <Redirect to="/login" />;
+    return null;
   }
 
   return <>{children}</>;
