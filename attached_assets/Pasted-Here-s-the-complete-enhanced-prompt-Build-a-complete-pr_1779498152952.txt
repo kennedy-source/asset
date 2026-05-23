@@ -1,0 +1,832 @@
+Here's the complete enhanced prompt:
+
+---
+
+Build a complete, production-ready Business Management System called **PAJOY Smart Business System** for a clothing, school uniform, and embroidery business in Kenya. This must be enterprise-grade, feature-rich, and ready for real business use.
+
+## Tech Stack
+- **Frontend:** React + TypeScript + Vite + Tailwind CSS + shadcn/ui + Wouter + React Query + Recharts
+- **Backend:** Node.js + Express + TypeScript + Drizzle ORM
+- **Database:** PostgreSQL 16
+- **Cache:** Redis (for sessions, rate limiting, queues)
+- **Deployment:** Docker + Docker Compose
+- **Payments:** Paystack (M-Pesa, Card, Bank)
+- **AI:** Anthropic Claude API
+- **Email:** Nodemailer + SMTP
+- **PDF:** Puppeteer or PDFKit
+- **File Storage:** Local with option for S3/Cloudflare R2
+- **Background Jobs:** Bull Queue with Redis
+
+---
+
+## Business Context
+- Clothing shop, school uniform supplier, and embroidery/printing business in Nairobi, Kenya
+- Currency: Kenya Shillings (KSh)
+- VAT: 16% (configurable)
+- Multi-branch capable
+- Multi-user with granular permissions
+- Roles: super_admin, admin, manager, cashier, production_staff, accountant
+
+---
+
+## Product Categories (seed all on first run)
+
+### School Uniforms
+School Shirts (Boys), School Shirts (Girls), School Trousers, School Shorts, School Skirts, School Dresses, School Pinafores, School Sweaters, School Cardigans, School Blazers, School Ties, School Belts, School Socks (Boys), School Socks (Girls), School Stockings, School Shoes (Boys), School Shoes (Girls), School Sandals, PE Shorts, PE T-Shirts, PE Tracksuits, School Bags, School Hats/Caps
+
+### General Clothing (Men)
+Men's T-Shirts, Men's Polo Shirts, Men's Casual Shirts, Men's Formal Shirts, Men's Trousers, Men's Jeans, Men's Shorts, Men's Suits, Men's Blazers, Men's Jackets, Men's Hoodies, Men's Sweaters, Men's Vests, Men's Underwear, Men's Socks, Men's Belts
+
+### General Clothing (Women)
+Women's T-Shirts, Women's Blouses, Women's Tops, Women's Dresses, Women's Skirts, Women's Trousers, Women's Jeans, Women's Shorts, Women's Suits, Women's Blazers, Women's Jackets, Women's Hoodies, Women's Cardigans, Women's Leggings, Women's Underwear, Women's Socks, Women's Stockings
+
+### Children's Clothing
+Boys' T-Shirts, Boys' Shirts, Boys' Trousers, Boys' Shorts, Boys' Jeans, Boys' Suits, Girls' Dresses, Girls' Skirts, Girls' Blouses, Girls' Leggings, Children's Jackets, Children's Sweaters, Baby Clothing, Baby Accessories
+
+### Sportswear
+Sports Jerseys, Sports Shorts, Sports Tracksuits, Sports Tops, Sports Leggings, Sports Socks, Team Kits, Swimming Costumes, Cycling Gear
+
+### Workwear & Corporate
+Corporate Shirts, Corporate Polo Shirts, Work Trousers, Overalls, Lab Coats, Chef Uniforms, Security Uniforms, Nurse Uniforms, Hotel Uniforms, School Staff Uniforms, Hi-Vis Vests, Safety Gear, Aprons
+
+### Embroidery & Printing Services
+Logo Embroidery, Badge Embroidery, Name Embroidery, Monogram Embroidery, Screen Printing, Digital Printing, DTF Printing, Heat Transfer, Sublimation Printing, Cap Printing, Bag Printing
+
+### Accessories
+Caps & Hats, Scarves, Gloves, Handkerchiefs, Ties, Bow Ties, Cufflinks, Suspenders, Wallets, Bags & Backpacks, Umbrellas, Keyrings, Lanyards, ID Card Holders
+
+---
+
+## Database Schema
+
+```sql
+-- Users & Auth
+users (id, name, email, phone, password_hash, role, branch_id, is_active, last_login, avatar_url, created_at, updated_at)
+branches (id, name, address, phone, email, is_active, created_at)
+permissions (id, role, resource, action, created_at)
+sessions (id, user_id, token, ip_address, user_agent, expires_at, created_at)
+
+-- Products
+categories (id, name, slug, description, parent_id, image_url, sort_order, is_active, created_at)
+products (id, name, sku, barcode, category_id, brand, description, price, cost_price, wholesale_price, stock_quantity, reserved_quantity, low_stock_threshold, reorder_quantity, unit, weight, image_url, images_json, is_active, is_featured, tax_rate, supplier_id, created_by, created_at, updated_at)
+product_variants (id, product_id, size, color, material, sku, barcode, price, stock_quantity, image_url, created_at)
+stock_movements (id, product_id, variant_id, type, quantity, reference_type, reference_id, cost_price, notes, created_by, branch_id, created_at)
+stock_adjustments (id, product_id, variant_id, old_quantity, new_quantity, reason, approved_by, created_by, created_at)
+
+-- Customers & Suppliers
+customers (id, name, email, phone, alt_phone, address, city, id_number, customer_type, credit_limit, balance, loyalty_points, notes, is_active, created_by, created_at, updated_at)
+customer_groups (id, name, discount_percentage, description, created_at)
+suppliers (id, name, contact_person, email, phone, address, city, payment_terms, credit_limit, balance, notes, is_active, created_at)
+supplier_payments (id, supplier_id, amount, method, reference, notes, created_by, created_at)
+
+-- Sales
+sales (id, sale_number, customer_id, cashier_id, branch_id, subtotal, discount_type, discount_value, discount_amount, tax_amount, total, amount_paid, change_given, payment_method, payment_status, paystack_reference, notes, receipt_printed, voided, voided_by, voided_at, void_reason, created_at)
+sale_items (id, sale_id, product_id, variant_id, product_name, sku, quantity, unit_price, cost_price, discount, total, created_at)
+sale_payments (id, sale_id, amount, method, reference, paystack_reference, status, created_at)
+layaways (id, customer_id, items_json, total, deposit_paid, balance, due_date, status, notes, created_by, created_at)
+layaway_payments (id, layaway_id, amount, method, reference, created_by, created_at)
+returns (id, original_sale_id, customer_id, reason, refund_amount, refund_method, items_json, processed_by, created_at)
+
+-- Invoices & Quotations
+invoices (id, invoice_number, customer_id, cashier_id, branch_id, subtotal, discount_amount, tax_amount, total, amount_paid, balance_due, payment_status, due_date, notes, terms, footer, sent_at, viewed_at, paid_at, created_at, updated_at)
+invoice_items (id, invoice_id, description, product_id, variant_id, quantity, unit_price, discount, tax_rate, total, created_at)
+invoice_payments (id, invoice_id, amount, method, reference, paystack_reference, status, notes, created_by, created_at)
+quotations (id, quotation_number, customer_id, cashier_id, subtotal, discount_amount, tax_amount, total, status, valid_until, notes, terms, converted_to_invoice_id, created_at, updated_at)
+quotation_items (id, quotation_id, description, product_id, quantity, unit_price, discount, total, created_at)
+credit_notes (id, credit_number, customer_id, invoice_id, amount, reason, status, created_by, created_at)
+
+-- Jobs
+embroidery_jobs (id, job_number, customer_id, school_name, company_name, contact_person, contact_phone, badge_image_url, badge_description, garment_type, garment_color, thread_colors, placement, width_cm, height_cm, quantity, unit_price, total, deposit_paid, balance, status, priority, due_date, completed_at, notes, assigned_to, created_by, branch_id, created_at, updated_at)
+printing_jobs (id, job_number, customer_id, design_url, design_description, print_type, garment_type, garment_color, print_color, print_size, placement, quantity, unit_price, total, deposit_paid, balance, status, priority, due_date, completed_at, notes, assigned_to, created_by, branch_id, created_at, updated_at)
+production_orders (id, order_number, title, status, priority, due_date, total_jobs, completed_jobs, notes, created_by, branch_id, created_at, updated_at)
+production_order_jobs (id, production_order_id, job_type, job_id, created_at)
+job_status_history (id, job_type, job_id, old_status, new_status, notes, changed_by, created_at)
+
+-- Finance
+expenses (id, title, description, amount, category, payment_method, reference, receipt_url, recurring, recurring_interval, supplier_id, approved_by, created_by, branch_id, expense_date, created_at)
+expense_categories (id, name, description, budget_amount, created_at)
+purchase_orders (id, po_number, supplier_id, status, subtotal, tax_amount, total, notes, expected_delivery, delivered_at, created_by, branch_id, created_at)
+purchase_order_items (id, purchase_order_id, product_id, quantity, unit_cost, total, received_quantity, created_at)
+accounts (id, name, type, balance, currency, description, is_active, created_at)
+transactions (id, account_id, type, amount, reference, description, related_type, related_id, created_by, created_at)
+cash_movements (id, type, amount, reason, opening_balance, closing_balance, cashier_id, branch_id, shift_id, created_at)
+shifts (id, cashier_id, branch_id, opening_balance, closing_balance, total_sales, total_cash, total_mpesa, total_card, status, opened_at, closed_at, notes)
+
+-- Loyalty
+loyalty_transactions (id, customer_id, points, type, reference, sale_id, created_at)
+loyalty_rules (id, spend_amount, points_earned, points_value, is_active, created_at)
+
+-- Payments
+payments (id, reference, payment_type, sale_id, invoice_id, customer_id, amount, method, paystack_reference, paystack_status, mpesa_receipt, phone, status, webhook_data, created_at)
+
+-- Notifications
+notifications (id, user_id, title, message, type, read, link, created_at)
+notification_templates (id, name, subject, body, type, is_active, created_at)
+
+-- System
+audit_logs (id, user_id, user_name, action, entity, entity_id, old_values, new_values, ip_address, user_agent, branch_id, created_at)
+settings (id, key, value, category, description, updated_by, updated_at)
+ai_scans (id, image_url, image_base64, extracted_items_json, confidence, status, created_by, created_at)
+uploaded_documents (id, filename, original_name, file_path, file_type, file_size, uploaded_by, created_at)
+backup_logs (id, filename, size, status, created_by, created_at)
+sync_queue (id, entity, entity_id, action, payload, status, attempts, last_error, created_at)
+sequences (id, name, prefix, current_value, increment_by, updated_at)
+```
+
+---
+
+## Complete API Endpoints
+
+```
+# Auth
+POST   /api/auth/register
+POST   /api/auth/login
+POST   /api/auth/logout
+GET    /api/auth/me
+PATCH  /api/auth/change-password
+POST   /api/auth/forgot-password
+POST   /api/auth/reset-password
+
+# Users
+GET    /api/users
+POST   /api/users
+GET    /api/users/:id
+PATCH  /api/users/:id
+DELETE /api/users/:id
+PATCH  /api/users/:id/toggle-active
+
+# Branches
+GET    /api/branches
+POST   /api/branches
+PATCH  /api/branches/:id
+
+# Products
+GET    /api/products
+POST   /api/products
+GET    /api/products/:id
+PATCH  /api/products/:id
+DELETE /api/products/:id
+GET    /api/products/search?q=
+GET    /api/products/barcode/:barcode
+POST   /api/products/:id/adjust-stock
+GET    /api/products/:id/stock-movements
+GET    /api/products/low-stock
+
+# Categories
+GET    /api/categories
+POST   /api/categories
+PATCH  /api/categories/:id
+DELETE /api/categories/:id
+
+# Product Variants
+GET    /api/products/:id/variants
+POST   /api/products/:id/variants
+PATCH  /api/products/:id/variants/:variantId
+
+# Customers
+GET    /api/customers
+POST   /api/customers
+GET    /api/customers/:id
+PATCH  /api/customers/:id
+DELETE /api/customers/:id
+GET    /api/customers/:id/purchases
+GET    /api/customers/:id/invoices
+GET    /api/customers/:id/statement
+GET    /api/customers/:id/loyalty-points
+
+# Suppliers
+GET    /api/suppliers
+POST   /api/suppliers
+GET    /api/suppliers/:id
+PATCH  /api/suppliers/:id
+DELETE /api/suppliers/:id
+GET    /api/suppliers/:id/purchase-orders
+
+# Sales
+GET    /api/sales
+POST   /api/sales
+GET    /api/sales/:id
+POST   /api/sales/:id/void
+POST   /api/sales/:id/return
+GET    /api/sales/:id/receipt
+POST   /api/sales/:id/print-receipt
+
+# Layaways
+GET    /api/layaways
+POST   /api/layaways
+GET    /api/layaways/:id
+POST   /api/layaways/:id/payment
+POST   /api/layaways/:id/complete
+POST   /api/layaways/:id/cancel
+
+# Invoices
+GET    /api/invoices
+POST   /api/invoices
+GET    /api/invoices/:id
+PATCH  /api/invoices/:id
+DELETE /api/invoices/:id
+PATCH  /api/invoices/:id/payment-status
+POST   /api/invoices/:id/payment
+POST   /api/invoices/:id/send-email
+GET    /api/invoices/:id/pdf
+POST   /api/invoices/:id/void
+POST   /api/credit-notes
+
+# Quotations
+GET    /api/quotations
+POST   /api/quotations
+GET    /api/quotations/:id
+PATCH  /api/quotations/:id
+DELETE /api/quotations/:id
+POST   /api/quotations/:id/convert-to-invoice
+POST   /api/quotations/:id/send-email
+GET    /api/quotations/:id/pdf
+
+# Payments
+GET    /api/payments
+GET    /api/payments/summary?date=YYYY-MM-DD&branch_id=
+POST   /api/payments/paystack/initialize
+POST   /api/payments/paystack/mpesa
+GET    /api/payments/paystack/verify/:reference
+POST   /api/payments/paystack/webhook
+GET    /api/payments/history?from=&to=&method=
+
+# Jobs - Embroidery
+GET    /api/embroidery-jobs
+POST   /api/embroidery-jobs
+GET    /api/embroidery-jobs/:id
+PATCH  /api/embroidery-jobs/:id
+PATCH  /api/embroidery-jobs/:id/status
+POST   /api/embroidery-jobs/:id/payment
+DELETE /api/embroidery-jobs/:id
+
+# Jobs - Printing
+GET    /api/printing-jobs
+POST   /api/printing-jobs
+GET    /api/printing-jobs/:id
+PATCH  /api/printing-jobs/:id
+PATCH  /api/printing-jobs/:id/status
+POST   /api/printing-jobs/:id/payment
+DELETE /api/printing-jobs/:id
+
+# Production Orders
+GET    /api/production-orders
+POST   /api/production-orders
+GET    /api/production-orders/:id
+PATCH  /api/production-orders/:id
+PATCH  /api/production-orders/:id/status
+
+# Expenses
+GET    /api/expenses
+POST   /api/expenses
+GET    /api/expenses/:id
+PATCH  /api/expenses/:id
+DELETE /api/expenses/:id
+GET    /api/expense-categories
+
+# Purchase Orders
+GET    /api/purchase-orders
+POST   /api/purchase-orders
+GET    /api/purchase-orders/:id
+PATCH  /api/purchase-orders/:id
+POST   /api/purchase-orders/:id/receive
+
+# Shifts
+GET    /api/shifts
+POST   /api/shifts/open
+POST   /api/shifts/close
+GET    /api/shifts/current
+GET    /api/shifts/:id/report
+
+# Reports
+GET    /api/reports/dashboard?branch_id=&date=
+GET    /api/reports/sales?from=&to=&method=&category=&product=&cashier=&branch=&group_by=
+GET    /api/reports/sales/by-hour?date=
+GET    /api/reports/sales/by-day?from=&to=
+GET    /api/reports/sales/by-week?from=&to=
+GET    /api/reports/sales/by-month?year=
+GET    /api/reports/sales/by-cashier?from=&to=
+GET    /api/reports/sales/by-product?from=&to=&limit=
+GET    /api/reports/sales/by-category?from=&to=
+GET    /api/reports/sales/by-customer?from=&to=&limit=
+GET    /api/reports/sales/by-payment-method?from=&to=
+GET    /api/reports/sales/by-branch?from=&to=
+GET    /api/reports/inventory?category=&low_stock=&branch=
+GET    /api/reports/inventory/valuation
+GET    /api/reports/inventory/movements?from=&to=&product=
+GET    /api/reports/inventory/turnover?from=&to=
+GET    /api/reports/financial/profit-loss?from=&to=
+GET    /api/reports/financial/revenue?from=&to=&group_by=
+GET    /api/reports/financial/expenses?from=&to=&category=
+GET    /api/reports/financial/cash-flow?from=&to=
+GET    /api/reports/financial/tax?from=&to=
+GET    /api/reports/customers/top?from=&to=&limit=
+GET    /api/reports/customers/new?from=&to=
+GET    /api/reports/customers/retention?from=&to=
+GET    /api/reports/jobs/embroidery?from=&to=&status=
+GET    /api/reports/jobs/printing?from=&to=&status=
+GET    /api/reports/jobs/production?from=&to=
+GET    /api/reports/staff/performance?from=&to=
+GET    /api/reports/loyalty?from=&to=
+GET    /api/reports/export?type=sales&from=&to=&format=csv
+GET    /api/reports/export?type=inventory&format=xlsx
+
+# AI
+POST   /api/ai/extract-items
+POST   /api/ai/suggest-price
+POST   /api/ai/analyze-sales
+
+# Notifications
+GET    /api/notifications
+PATCH  /api/notifications/:id/read
+POST   /api/notifications/mark-all-read
+
+# Uploads
+POST   /api/uploads/image
+POST   /api/uploads/document
+DELETE /api/uploads/:id
+
+# Settings
+GET    /api/settings
+POST   /api/settings/bulk-update
+GET    /api/settings/:key
+POST   /api/settings/:key
+
+# Backup
+POST   /api/backup/create
+GET    /api/backup/list
+POST   /api/backup/restore
+GET    /api/backup/download/:filename
+
+# Audit
+GET    /api/audit-logs?from=&to=&user=&action=&entity=
+
+# Health
+GET    /api/healthz
+```
+
+---
+
+## Frontend Pages & Features
+
+### 1. Dashboard
+- Today's revenue, sales count, new customers, pending jobs
+- Revenue chart (hourly/daily/weekly/monthly toggle)
+- Top selling products (bar chart)
+- Sales by payment method (pie chart)
+- Recent transactions feed
+- Low stock alerts with quick reorder
+- Pending jobs summary (embroidery + printing)
+- Quick action buttons: New Sale, New Invoice, New Job
+- Branch selector (if multi-branch)
+- Real-time updates via polling
+
+### 2. POS Terminal
+- Full-screen POS mode
+- Product search (name, SKU, barcode)
+- Barcode scanner support (keyboard wedge)
+- Category filter tabs
+- Product grid with images
+- Cart with quantity controls, discount per item
+- Customer search and attach
+- Global discount (% or fixed)
+- Tax toggle
+- Payment: Cash (change calc), M-Pesa (STK push), Card (Paystack), Split payment
+- Layaway option
+- Hold sale and retrieve
+- Recent sales sidebar
+- Print receipt or email receipt
+- Keyboard shortcuts for speed
+- Shift management integration
+
+### 3. Products
+- Grid and list view toggle
+- Filter by category, supplier, stock status
+- Sort by name, price, stock, sales
+- Quick edit inline
+- Bulk actions: price update, category change, activate/deactivate
+- Import products from CSV/Excel
+- Export product list
+- Product detail: variants (size/color), images, price history, stock movements
+- Stock adjustment modal with reason
+- Barcode generation and print
+- Low stock report
+
+### 4. Inventory Management
+- Stock overview by category
+- Stock movements log with filters
+- Stock adjustment history
+- Purchase orders: create, receive, track
+- Supplier management
+- Stock valuation report
+- Reorder alerts
+- Batch stock update
+
+### 5. Customers
+- Customer list with search and filters
+- Customer profile: details, purchase history, invoices, loyalty points
+- Customer statement (PDF)
+- Credit limit management
+- Loyalty points history
+- Birthday alerts
+- Customer groups with group discounts
+- Import customers from CSV
+- Export customer list
+
+### 6. Sales History
+- Searchable sales list
+- Filter by date, cashier, payment method, status, branch
+- Sale detail with items and payments
+- Print/reprint receipt
+- Void sale with reason
+- Process return/refund
+- Sales export to CSV/Excel
+
+### 7. Invoices
+- Invoice list with status badges
+- Create invoice with line items
+- Add products or custom items
+- Discount and tax
+- Payment status: Unpaid (red), Partial (yellow), Paid (green)
+- Record payment (Cash/M-Pesa/Card/Bank)
+- Paystack payment link
+- Send invoice by email
+- Download PDF
+- Void invoice with credit note
+- Recurring invoices
+- Invoice aging report
+
+### 8. Quotations
+- Create quotation
+- Convert to invoice with one click
+- Send by email
+- Download PDF
+- Validity date tracking
+- Status: Draft, Sent, Accepted, Rejected, Expired
+
+### 9. Embroidery Jobs
+- Kanban board: Pending → Quoted → Confirmed → In Progress → Quality Check → Ready → Delivered → Cancelled
+- Job card with: customer, school/company, badge image preview, thread colors, placement, size, quantity, price, due date, assigned staff
+- Create job with badge image upload from computer
+- Job detail view with status history timeline
+- Print job order/work ticket
+- Bulk status update
+- Filter by status, due date, assigned staff, customer
+- Calendar view of due dates
+- Job costing
+- Payment tracking per job (deposit + balance)
+
+### 10. Printing Jobs
+- Same kanban as embroidery
+- Job card with design preview
+- Print types: Screen, Digital, DTF, Heat Transfer, Sublimation
+- Color management
+- Print size and placement
+- Payment tracking
+
+### 11. Production Orders
+- Group multiple embroidery/printing jobs
+- Progress tracking (X of Y jobs done)
+- Priority levels
+- Due date management
+- Assign to staff
+- Production schedule calendar
+
+### 12. Payments & Finance
+- Daily payments summary: Cash, M-Pesa, Card, Bank, Total
+- Date picker for historical view
+- Payment history with search and filters
+- Paystack payment links
+- Cash movement log (cash in/out)
+- Shift reports
+- Expense management with categories
+- Expense approval workflow
+- Purchase orders
+
+### 13. Reports (Comprehensive)
+
+#### Sales Reports
+- Sales by period (hourly, daily, weekly, monthly, yearly)
+- Sales by cashier/staff
+- Sales by product (top sellers, slow movers)
+- Sales by category
+- Sales by customer (top customers)
+- Sales by payment method
+- Sales by branch
+- Void/refund report
+- Discount report
+- Tax report
+
+#### Inventory Reports
+- Current stock levels
+- Stock valuation
+- Low stock / out of stock
+- Stock movements history
+- Stock turnover rate
+- Dead stock (no sales in X days)
+- Purchase history
+- Supplier performance
+
+#### Financial Reports
+- Profit & Loss statement
+- Revenue breakdown
+- Expense breakdown
+- Cash flow statement
+- VAT/Tax summary
+- Gross margin by product/category
+- Outstanding invoices aging
+
+#### Customer Reports
+- Top customers by revenue
+- New customers trend
+- Customer retention rate
+- Loyalty points summary
+- Customer purchase frequency
+
+#### Jobs Reports
+- Embroidery jobs by status
+- Printing jobs by status
+- Jobs revenue
+- Staff productivity
+- Jobs completion rate
+- Overdue jobs
+
+#### Export Options
+- All reports exportable to CSV, Excel, PDF
+- Custom date range
+- Schedule automated email reports (daily/weekly/monthly)
+- Print any report
+
+### 14. AI Reader
+- Upload image from computer
+- Paste image URL
+- Camera capture (if supported)
+- Claude API analyzes image
+- Shows extracted items in editable table
+- Edit: name, quantity, unit price, total
+- Add new rows manually
+- Delete incorrect rows
+- Confidence score per item
+- Create: Quotation, Invoice, Sale, Embroidery Draft, Printing Draft
+- Save scan history
+
+### 15. Settings
+- **Business Profile:** name, address, phone, email, logo, website, KRA PIN, registration number
+- **Receipt:** header, footer, logo, terms, show/hide fields, thermal printer format (58mm/80mm)
+- **Tax:** VAT rate, tax inclusive/exclusive, tax registration number
+- **Loyalty:** points per spend, points value, enable/disable
+- **Notifications:** email alerts for low stock, new orders, payments
+- **Payment Methods:** enable/disable, configure Paystack keys
+- **Users & Roles:** manage staff accounts
+- **Branches:** manage multiple locations
+- **Backup:** manual backup, restore, schedule automated backup
+- **Cloud Sync:** connect to cloud database
+- **Integrations:** Paystack, email SMTP, Anthropic AI
+- **System:** currency, timezone, date format, language
+
+### 16. Shift Management
+- Open shift with opening balance
+- Real-time shift totals
+- Close shift with cash count
+- Shift report: sales, payments, expenses
+- Cash movement log
+- Discrepancy tracking
+
+### 17. Audit Logs
+- All user actions logged
+- Filter by user, action, entity, date
+- IP address tracking
+- Old vs new values for edits
+- Export audit log
+
+### 18. Notifications
+- In-app notification bell
+- Low stock alerts
+- Payment received alerts
+- Job status change alerts
+- Due invoice reminders
+- New customer registration
+- System alerts
+
+---
+
+## Paystack Integration
+
+### M-Pesa STK Push
+```typescript
+POST /api/payments/paystack/mpesa
+{
+  invoiceId?: number,
+  saleId?: number,
+  phone: string,        // 0712345678 or 254712345678
+  amount: number,
+  description: string
+}
+// Response: { reference, status, message }
+
+// Poll for status:
+GET /api/payments/paystack/verify/:reference
+```
+
+### Card Payment
+```typescript
+POST /api/payments/paystack/initialize
+{
+  invoiceId?: number,
+  saleId?: number,
+  email: string,
+  amount: number,
+  callback_url: string
+}
+// Response: { authorizationUrl, reference, accessCode }
+```
+
+### Webhook (auto-update payment status)
+```typescript
+POST /api/payments/paystack/webhook
+// Verify HMAC signature with PAYSTACK_WEBHOOK_SECRET
+// On charge.success: mark invoice/sale as paid
+// On transfer.success: record payment
+// Send email receipt to customer
+```
+
+---
+
+## Docker Setup
+
+```yaml
+# docker-compose.yml
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: pajoy
+      POSTGRES_USER: pajoy
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pajoy"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    volumes:
+      - redis_data:/data
+    ports:
+      - "6379:6379"
+
+  api:
+    build:
+      context: ./api
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql://pajoy:${DB_PASSWORD}@postgres:5432/pajoy
+      REDIS_URL: redis://redis:6379
+      JWT_SECRET: ${JWT_SECRET}
+      NODE_ENV: production
+      PORT: 8080
+      CORS_ORIGIN: ${FRONTEND_URL}
+      PAYSTACK_SECRET_KEY: ${PAYSTACK_SECRET_KEY}
+      PAYSTACK_PUBLIC_KEY: ${PAYSTACK_PUBLIC_KEY}
+      PAYSTACK_WEBHOOK_SECRET: ${PAYSTACK_WEBHOOK_SECRET}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+      SMTP_HOST: ${SMTP_HOST}
+      SMTP_PORT: ${SMTP_PORT}
+      SMTP_USER: ${SMTP_USER}
+      SMTP_PASS: ${SMTP_PASS}
+      FROM_EMAIL: ${FROM_EMAIL}
+      BUSINESS_NAME: ${BUSINESS_NAME}
+      UPLOAD_DIR: /app/uploads
+    volumes:
+      - uploads_data:/app/uploads
+      - backups_data:/app/backups
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        VITE_API_URL: ${API_URL}
+        VITE_PAYSTACK_PUBLIC_KEY: ${PAYSTACK_PUBLIC_KEY}
+    restart: unless-stopped
+    ports:
+      - "3000:80"
+    depends_on:
+      - api
+
+  nginx:
+    image: nginx:alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf
+      - ./ssl:/etc/nginx/ssl
+    depends_on:
+      - api
+      - frontend
+
+volumes:
+  postgres_data:
+  redis_data:
+  uploads_data:
+  backups_data:
+```
+
+---
+
+## Environment Variables (.env.example)
+
+```env
+# Database
+DB_PASSWORD=strongpassword
+DATABASE_URL=postgresql://pajoy:strongpassword@localhost:5432/pajoy
+
+# Redis
+REDIS_URL=redis://localhost:6379
+
+# JWT
+JWT_SECRET=your-super-long-random-jwt-secret-minimum-64-characters
+
+# Server
+NODE_ENV=production
+PORT=8080
+FRONTEND_URL=https://pajoy.org
+API_URL=https://api.pajoy.org
+
+# Paystack
+PAYSTACK_SECRET_KEY=sk_live_xxxxxxxxxxxx
+PAYSTACK_PUBLIC_KEY=pk_live_xxxxxxxxxxxx
+PAYSTACK_WEBHOOK_SECRET=xxxxxxxxxxxxxxxx
+
+# Anthropic AI
+ANTHROPIC_API_KEY=sk-ant-xxxxxxxxxxxx
+
+# Email (SMTP)
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587
+SMTP_USER=your@gmail.com
+SMTP_PASS=your-app-password
+FROM_EMAIL=noreply@pajoy.co.ke
+FROM_NAME=PAJOY Smart Business
+
+# Business
+BUSINESS_NAME=PAJOY Smart Business
+BUSINESS_PHONE=+254700000000
+BUSINESS_EMAIL=info@pajoy.co.ke
+BUSINESS_ADDRESS=Nairobi, Kenya
+BUSINESS_KRA_PIN=P000000000A
+
+# Storage
+UPLOAD_DIR=./uploads
+MAX_FILE_SIZE=10485760
+
+# Features
+ENABLE_LOYALTY=true
+ENABLE_MULTI_BRANCH=false
+ENABLE_AI=true
+```
+
+---
+
+## Additional Production Requirements
+
+- **Security:** Helmet.js, CORS, rate limiting, SQL injection protection, XSS protection, JWT refresh tokens, password strength validation
+- **Logging:** Structured JSON logging with Pino, request logging, error tracking
+- **Performance:** Database indexes on all foreign keys and search fields, query optimization, Redis caching for reports
+- **Validation:** Zod schemas for all API inputs and outputs
+- **Error Handling:** Global error handler, custom error classes, user-friendly error messages
+- **Testing:** Unit tests for critical business logic, integration tests for API endpoints
+- **CI/CD:** GitHub Actions workflow for Docker build and deployment
+- **Monitoring:** Health check endpoint, uptime monitoring compatible
+- **Backup:** Automated daily PostgreSQL backup to local storage
+- **Documentation:** API documentation with Swagger/OpenAPI
+- **Accessibility:** ARIA labels, keyboard navigation, screen reader compatible
+- **Mobile:** Fully responsive, works on phone and tablet
+- **Print:** Thermal receipt printer support (ESC/POS), A4 invoice PDF, barcode labels
+- **Offline:** Service worker for basic offline functionality
+- **SEO:** Meta tags for web version
+
+---
+
+Build this as a world-class, production-ready business management system. Every feature must work end-to-end. Use proper TypeScript types everywhere, handle all edge cases, show loading states, handle errors gracefully, and make the UI beautiful and intuitive for a Kenyan business owner and their staff.
+
+---
