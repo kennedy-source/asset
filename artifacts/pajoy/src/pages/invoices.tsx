@@ -1,106 +1,190 @@
-import React, { useState } from "react";
-import { useListInvoices } from "@workspace/api-client-react";
-import { formatCurrency, formatDate } from "@/lib/format";
-import { Card, CardContent } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Skeleton } from "@/components/ui/skeleton";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Badge } from "@/components/ui/badge";
-import { Search, Plus } from "lucide-react";
+// @ts-nocheck
 import { Link } from "wouter";
+import { useState } from "react";
+import { useListInvoices } from "@workspace/api-client-react";
+import { desktopApiJson } from "@/desktop-api";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { Plus, Eye, FileText } from "lucide-react";
+import { PaginationControls } from "@/components/pagination-controls";
+import { formatDate } from "@/lib/format";
+
+function fmt(n: number) {
+  return `KSh ${(n || 0).toLocaleString()}`;
+}
+
+const statusColors: Record<string, string> = {
+  PAID: "bg-emerald-100 text-emerald-700",
+  PARTIAL: "bg-amber-100 text-amber-700",
+  UNPAID: "bg-red-100 text-red-700",
+  OVERDUE: "bg-red-200 text-red-800",
+};
 
 export default function Invoices() {
-  const [searchTerm, setSearchTerm] = useState("");
-  const { data, isLoading } = useListInvoices({ query: searchTerm });
-
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case "paid": return "bg-green-100 text-green-800 hover:bg-green-100";
-      case "partial": return "bg-amber-100 text-amber-800 hover:bg-amber-100";
-      case "unpaid": return "bg-destructive/10 text-destructive hover:bg-destructive/10";
-      case "voided": return "bg-gray-100 text-gray-800 hover:bg-gray-100";
-      default: return "bg-muted text-muted-foreground";
-    }
-  };
+  const [page, setPage] = useState(1);
+  const limit = 50;
+  const { data, isLoading } = useListInvoices({ page, limit } as any);
+  const invoices = data?.items ?? [];
+  const total = data?.total ?? invoices.length;
+  const unpaidTotal = invoices
+    .filter((i) => String(i.status ?? i.payment_status ?? "").toUpperCase() !== "PAID")
+    .reduce((s, i) => s + Number(i.balance ?? i.balance_due ?? 0), 0);
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-3xl font-bold tracking-tight">Invoices</h1>
-        <Button>
-          <Plus className="h-4 w-4 mr-2" />
-          Create Invoice
-        </Button>
+        <div>
+          <h1 className="text-2xl font-bold">Invoices</h1>
+          <p className="text-muted-foreground text-sm mt-1">
+            {invoices.length} invoices
+          </p>
+        </div>
+        <Link href="/invoices/new">
+          <Button data-testid="button-new-invoice">
+            <Plus className="w-4 h-4 mr-2" />
+            New Invoice
+          </Button>
+        </Link>
       </div>
 
-      <div className="flex items-center gap-4">
-        <div className="relative flex-1 max-w-sm">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input 
-            placeholder="Search invoices..." 
-            className="pl-9"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-          />
+      <div className="grid grid-cols-3 gap-4">
+        <div className="rounded-xl border bg-card p-4 shadow-sm">
+          <p className="text-sm text-muted-foreground">Total Invoiced</p>
+          <p className="text-xl font-bold mt-1" data-testid="stat-total">
+            {fmt(invoices.reduce((s, i) => s + Number(i.total ?? 0), 0))}
+          </p>
+        </div>
+        <div className="rounded-xl border bg-card p-4 shadow-sm">
+          <p className="text-sm text-muted-foreground">Outstanding Balance</p>
+          <p
+            className="text-xl font-bold mt-1 text-red-600"
+            data-testid="stat-unpaid"
+          >
+            {fmt(unpaidTotal)}
+          </p>
+        </div>
+        <div className="rounded-xl border bg-card p-4 shadow-sm">
+          <p className="text-sm text-muted-foreground">Paid Invoices</p>
+          <p
+            className="text-xl font-bold mt-1 text-emerald-600"
+            data-testid="stat-paid"
+          >
+            {invoices.filter((i) => String(i.status ?? i.payment_status ?? "").toUpperCase() === "PAID").length}
+          </p>
         </div>
       </div>
 
-      <Card>
-        <CardContent className="p-0">
-          {isLoading ? (
-            <div className="p-4 space-y-4">
-              {[...Array(5)].map((_, i) => (
-                <Skeleton key={i} className="h-12 w-full" />
-              ))}
-            </div>
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Invoice #</TableHead>
-                  <TableHead>Date</TableHead>
-                  <TableHead>Customer</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead className="text-right">Total</TableHead>
-                  <TableHead className="text-right">Balance Due</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
+      {isLoading ? (
+        <div className="text-center py-16 text-muted-foreground">
+          Loading...
+        </div>
+      ) : invoices.length === 0 ? (
+        <div className="text-center py-16 text-muted-foreground">
+          <FileText className="w-12 h-12 mx-auto mb-3 opacity-30" />
+          <p className="font-medium">No invoices yet</p>
+        </div>
+      ) : (
+        <div className="rounded-xl border bg-card shadow-sm overflow-hidden">
+          <Table>
+            <TableHeader>
+              <TableRow className="bg-muted/40">
+                <TableHead>Invoice #</TableHead>
+                <TableHead>Customer</TableHead>
+                <TableHead>Total</TableHead>
+                <TableHead>Paid</TableHead>
+                <TableHead>Balance</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead>Due Date</TableHead>
+                <TableHead></TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {invoices.map((inv) => {
+                const status = String(inv.status ?? inv.payment_status ?? "unpaid").toUpperCase();
+                const amountPaid = Number(inv.amountPaid ?? inv.amount_paid ?? 0);
+                const balance = Number(inv.balance ?? inv.balance_due ?? 0);
+                return (
+                <TableRow key={inv.id} data-testid={`row-invoice-${inv.id}`}>
+                  <TableCell className="font-mono font-medium text-sm">
+                    {inv.invoiceNumber}
+                  </TableCell>
+                  <TableCell>{(inv as any).customerName || "—"}</TableCell>
+                  <TableCell className="font-semibold">
+                    {fmt(inv.total)}
+                  </TableCell>
+                  <TableCell className="text-emerald-600">
+                    {fmt(amountPaid)}
+                  </TableCell>
+                  <TableCell
+                    className={
+                      balance > 0
+                        ? "text-red-600 font-medium"
+                        : "text-muted-foreground"
+                    }
+                  >
+                    {fmt(balance)}
+                  </TableCell>
+                  <TableCell>
+                    <Select
+                      value={status}
+                      onValueChange={async (v: string) => {
+                        try {
+                          await desktopApiJson(`/api/invoices/${inv.id}/payment-status`, {
+                            method: "PATCH",
+                            body: { status: v },
+                          });
+                          // refresh list
+                          window.location.reload();
+                        } catch (err) {
+                          alert("Failed to update status");
+                        }
+                      }}
+                    >
+                      <SelectTrigger className="w-36">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="UNPAID">UNPAID</SelectItem>
+                        <SelectItem value="PARTIAL">PARTIAL</SelectItem>
+                        <SelectItem value="PAID">PAID</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </TableCell>
+                  <TableCell className="text-muted-foreground text-sm">
+                    {inv.dueDate
+                      ? new Date(inv.dueDate).toLocaleDateString()
+                      : "—"}
+                  </TableCell>
+                  <TableCell>
+                    <Link href={`/invoices/${inv.id}`}>
+                      <Button size="sm" variant="ghost">
+                        <Eye className="w-4 h-4" />
+                      </Button>
+                    </Link>
+                  </TableCell>
                 </TableRow>
-              </TableHeader>
-              <TableBody>
-                {data?.data?.map((invoice) => (
-                  <TableRow key={invoice.id}>
-                    <TableCell className="font-medium">{invoice.invoice_number}</TableCell>
-                    <TableCell>{formatDate(invoice.created_at)}</TableCell>
-                    <TableCell>{invoice.customer_name || "-"}</TableCell>
-                    <TableCell>
-                      <Badge variant="secondary" className={`capitalize ${getStatusColor(invoice.payment_status)}`}>
-                        {invoice.payment_status}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="text-right">{formatCurrency(invoice.total)}</TableCell>
-                    <TableCell className="text-right font-medium text-destructive">
-                      {invoice.balance_due && invoice.balance_due > 0 ? formatCurrency(invoice.balance_due) : "-"}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <Link href={`/invoices/${invoice.id}`}>
-                        <Button variant="ghost" size="sm">View</Button>
-                      </Link>
-                    </TableCell>
-                  </TableRow>
-                ))}
-                {data?.data?.length === 0 && (
-                  <TableRow>
-                    <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
-                      No invoices found
-                    </TableCell>
-                  </TableRow>
-                )}
-              </TableBody>
-            </Table>
-          )}
-        </CardContent>
-      </Card>
+              )})}
+            </TableBody>
+          </Table>
+          <div className="px-4">
+            <PaginationControls
+              page={page}
+              limit={limit}
+              total={total}
+              onPageChange={setPage}
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 }

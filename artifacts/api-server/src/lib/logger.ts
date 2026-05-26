@@ -1,6 +1,16 @@
 import pino from "pino";
+import { env } from "../config/env";
+import { initSentry } from "./sentry";
 
-const isProduction = process.env.NODE_ENV === "production";
+const isProduction = env.isProduction;
+
+if (process.env.SENTRY_DSN) {
+  try {
+    initSentry();
+  } catch (err) {
+    // initialize logger below even if sentry init fails
+  }
+}
 
 export const logger = pino({
   level: process.env.LOG_LEVEL ?? "info",

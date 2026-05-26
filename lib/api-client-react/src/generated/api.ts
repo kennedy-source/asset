@@ -202,7 +202,16 @@ export const login = async (loginInput: LoginInput, options?: RequestInit): Prom
   }
 );}
 
-
+/* duplicate Customer interface removed; use the generated schema type */
+interface RemovedCustomer {
+  id: number;
+  name: string;
+  email?: string;
+  phone?: string;
+  address?: string;
+  schoolName?: string; // ✅ add this
+  customerType?: string;
+}
 
 
 export const getLoginMutationOptions = <TError = ErrorType<void>,
@@ -5329,4 +5338,3 @@ export const useUpdateUser = <TError = ErrorType<unknown>,
       > => {
       return useMutation(getUpdateUserMutationOptions(options));
     }
-

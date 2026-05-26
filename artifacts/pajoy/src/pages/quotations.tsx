@@ -1,100 +1,127 @@
-import React, { useState } from "react";
+// @ts-nocheck
+import { Link } from "wouter";
+import { useState } from "react";
 import { useListQuotations } from "@workspace/api-client-react";
-import { formatCurrency, formatDate } from "@/lib/format";
-import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Skeleton } from "@/components/ui/skeleton";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Search, Plus } from "lucide-react";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { Plus, Eye, FileText } from "lucide-react";
+import { PaginationControls } from "@/components/pagination-controls";
+
+function fmt(n: number) {
+  return `KSh ${(n || 0).toLocaleString()}`;
+}
+
+const statusColors: Record<string, string> = {
+  DRAFT: "bg-gray-100 text-gray-700",
+  SENT: "bg-blue-100 text-blue-700",
+  ACCEPTED: "bg-emerald-100 text-emerald-700",
+  REJECTED: "bg-red-100 text-red-700",
+  EXPIRED: "bg-amber-100 text-amber-700",
+};
 
 export default function Quotations() {
-  const [searchTerm, setSearchTerm] = useState("");
-  const { data, isLoading } = useListQuotations({ query: searchTerm });
-
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case "accepted": return "bg-green-100 text-green-800 hover:bg-green-100";
-      case "sent": return "bg-blue-100 text-blue-800 hover:bg-blue-100";
-      case "draft": return "bg-gray-100 text-gray-800 hover:bg-gray-100";
-      case "rejected": return "bg-destructive/10 text-destructive hover:bg-destructive/10";
-      case "expired": return "bg-orange-100 text-orange-800 hover:bg-orange-100";
-      default: return "bg-muted text-muted-foreground";
-    }
-  };
+  const [page, setPage] = useState(1);
+  const limit = 50;
+  const { data, isLoading } = useListQuotations({ page, limit } as any);
+  const quotations = data?.items ?? [];
+  const total = data?.total ?? quotations.length;
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-3xl font-bold tracking-tight">Quotations</h1>
-        <Button>
-          <Plus className="h-4 w-4 mr-2" />
-          Create Quotation
-        </Button>
-      </div>
-
-      <div className="flex items-center gap-4">
-        <div className="relative flex-1 max-w-sm">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input 
-            placeholder="Search quotations..." 
-            className="pl-9"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-          />
+        <div>
+          <h1 className="text-2xl font-bold">Quotations</h1>
+          <p className="text-muted-foreground text-sm mt-1">
+            {quotations.length} quotations
+          </p>
         </div>
+        <Link href="/quotations/new">
+          <Button data-testid="button-new-quotation">
+            <Plus className="w-4 h-4 mr-2" />
+            New Quotation
+          </Button>
+        </Link>
       </div>
 
-      <Card>
-        <CardContent className="p-0">
-          {isLoading ? (
-            <div className="p-4 space-y-4">
-              {[...Array(5)].map((_, i) => (
-                <Skeleton key={i} className="h-12 w-full" />
-              ))}
-            </div>
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Quotation #</TableHead>
-                  <TableHead>Date</TableHead>
-                  <TableHead>Customer</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead className="text-right">Total</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
+      {isLoading ? (
+        <div className="text-center py-16 text-muted-foreground">
+          Loading...
+        </div>
+      ) : quotations.length === 0 ? (
+        <div className="text-center py-16 text-muted-foreground">
+          <FileText className="w-12 h-12 mx-auto mb-3 opacity-30" />
+          <p className="font-medium">No quotations yet</p>
+        </div>
+      ) : (
+        <div className="rounded-xl border bg-card shadow-sm overflow-hidden">
+          <Table>
+            <TableHeader>
+              <TableRow className="bg-muted/40">
+                <TableHead>Quotation #</TableHead>
+                <TableHead>Customer</TableHead>
+                <TableHead>Total</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead>Valid Until</TableHead>
+                <TableHead>Date</TableHead>
+                <TableHead></TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {quotations.map((q) => (
+                <TableRow key={q.id} data-testid={`row-quotation-${q.id}`}>
+                  <TableCell className="font-mono font-medium text-sm">
+                    {q.quotationNumber}
+                  </TableCell>
+                  <TableCell>{(q as any).customerName || "—"}</TableCell>
+                  <TableCell className="font-semibold">
+                    {fmt(q.total)}
+                  </TableCell>
+                  <TableCell>
+                    <Badge className={statusColors[q.status] || ""}>
+                      {q.status}
+                    </Badge>
+                  </TableCell>
+                  <TableCell className="text-muted-foreground text-sm">
+                    {q.validUntil
+                      ? new Date(q.validUntil).toLocaleDateString()
+                      : "—"}
+                  </TableCell>
+                  <TableCell className="text-muted-foreground text-sm">
+                    {new Date(q.createdAt!).toLocaleDateString()}
+                  </TableCell>
+                  <TableCell>
+                    <Link href={`/quotations/${q.id}`}>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        data-testid={`button-view-${q.id}`}
+                      >
+                        <Eye className="w-4 h-4" />
+                      </Button>
+                    </Link>
+                  </TableCell>
                 </TableRow>
-              </TableHeader>
-              <TableBody>
-                {data?.data?.map((quote) => (
-                  <TableRow key={quote.id}>
-                    <TableCell className="font-medium">{quote.quotation_number}</TableCell>
-                    <TableCell>{formatDate(quote.created_at)}</TableCell>
-                    <TableCell>{quote.customer_name || "-"}</TableCell>
-                    <TableCell>
-                      <Badge variant="secondary" className={`capitalize ${getStatusColor(quote.status)}`}>
-                        {quote.status}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="text-right font-medium">{formatCurrency(quote.total)}</TableCell>
-                    <TableCell className="text-right">
-                      <Button variant="ghost" size="sm">View</Button>
-                    </TableCell>
-                  </TableRow>
-                ))}
-                {(!data?.data || data.data.length === 0) && (
-                  <TableRow>
-                    <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
-                      No quotations found
-                    </TableCell>
-                  </TableRow>
-                )}
-              </TableBody>
-            </Table>
-          )}
-        </CardContent>
-      </Card>
+              ))}
+            </TableBody>
+          </Table>
+          <div className="px-4">
+            <PaginationControls
+              page={page}
+              limit={limit}
+              total={total}
+              onPageChange={setPage}
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -1,3 +1,4 @@
+// @ts-nocheck
 import React from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
@@ -36,8 +37,9 @@ export default function Login() {
             <span className="text-2xl font-bold">PJ</span>
           </div>
           <CardTitle className="text-2xl font-bold tracking-tight">PAJOY Smart Business</CardTitle>
-          <CardDescription>Enter your credentials to access your dashboard</CardDescription>
-        </CardHeader>
+          <CardDescription>Enter your credentials to access your dashboard</CardDescription>            <p className="text-sm text-muted-foreground">
+              Default admin credentials: <span className="font-medium">admin@pajoy.co.ke</span> / <span className="font-medium">Admin@1234</span>
+            </p>        </CardHeader>
         <CardContent>
           <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">

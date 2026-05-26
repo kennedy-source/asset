@@ -1,86 +1,70 @@
-import { pgTable, text, serial, timestamp, integer, boolean, numeric, pgEnum } from "drizzle-orm/pg-core";
+import { sqliteTable, text, integer, index } from "drizzle-orm/sqlite-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
-import { usersTable, branchesTable } from "./users";
+import { money } from "./_columns";
+import { categoriesTable } from "./categories";
 
-export const stockMovementTypeEnum = pgEnum("stock_movement_type", [
-  "purchase", "sale", "adjustment", "return", "transfer", "opening"
-]);
+export const productsTable = sqliteTable(
+  "products",
+  {
+    id: integer("id").primaryKey(),
+    name: text("name").notNull(),
+    categoryId: integer("category_id").references(() => categoriesTable.id, {
+      onDelete: "set null",
+      onUpdate: "cascade",
+    }),
+    sku: text("sku"),
+    description: text("description"),
+    size: text("size"),
+    color: text("color"),
+    material: text("material"),
+    gender: text("gender"),
+    schoolName: text("school_name"),
+    barcode: text("barcode"),
+    qrCode: text("qr_code"),
+    brand: text("brand"),
+    fabricType: text("fabric_type"),
+    ageGroup: text("age_group"),
+    weight: money("weight"),
+    thumbnailUrl: text("thumbnail_url"),
+    discount: money("discount").notNull().default(0),
+    tax: money("tax").notNull().default(0),
+    minimumStock: integer("minimum_stock").notNull().default(0),
+    supplierId: integer("supplier_id"),
+    organizationName: text("organization_name"),
+    embroideryOption: integer("embroidery_option", { mode: "boolean" }).notNull().default(false),
+    printingOption: integer("printing_option", { mode: "boolean" }).notNull().default(false),
+    tags: text("tags"),
+    availabilityStatus: text("availability_status").notNull().default("available"),
+    productTypeId: integer("product_type_id"),
+    seasonalCollection: text("seasonal_collection"),
+    buyingPrice: money("buying_price").notNull().default(0),
+    sellingPrice: money("selling_price").notNull().default(0),
+    stockQuantity: integer("stock_quantity").notNull().default(0),
+    reorderLevel: integer("reorder_level").notNull().default(5),
+    imageUrl: text("image_url"),
+    isActive: integer("is_active", { mode: "boolean" }).notNull().default(true),
+    createdAt: integer("created_at", { mode: "timestamp" })
+      .notNull()
+      .defaultNow(),
+    updatedAt: integer("updated_at", { mode: "timestamp" })
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date()),
+  },
+  (t) => ({
+    createdAtIdx: index("products_created_at_idx").on(t.createdAt),
+    updatedAtIdx: index("products_updated_at_idx").on(t.updatedAt),
+    categoryIdIdx: index("products_category_id_idx").on(t.categoryId),
+    isActiveIdx: index("products_is_active_idx").on(t.isActive),
+    skuIdx: index("products_sku_idx").on(t.sku),
+  }),
+);
 
-export const categoriesTable = pgTable("categories", {
-  id: serial("id").primaryKey(),
-  name: text("name").notNull(),
-  slug: text("slug").notNull().unique(),
-  description: text("description"),
-  parentId: integer("parent_id"),
-  sortOrder: integer("sort_order").default(0),
-  isActive: boolean("is_active").notNull().default(true),
-  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+export const insertProductSchema = createInsertSchema(productsTable).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
 });
-
-export const suppliersTable = pgTable("suppliers", {
-  id: serial("id").primaryKey(),
-  name: text("name").notNull(),
-  contactPerson: text("contact_person"),
-  email: text("email"),
-  phone: text("phone"),
-  address: text("address"),
-  city: text("city"),
-  paymentTerms: text("payment_terms"),
-  creditLimit: numeric("credit_limit", { precision: 12, scale: 2 }).default("0"),
-  balance: numeric("balance", { precision: 12, scale: 2 }).default("0"),
-  notes: text("notes"),
-  isActive: boolean("is_active").notNull().default(true),
-  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-});
-
-export const productsTable = pgTable("products", {
-  id: serial("id").primaryKey(),
-  name: text("name").notNull(),
-  sku: text("sku").notNull().unique(),
-  barcode: text("barcode"),
-  categoryId: integer("category_id").references(() => categoriesTable.id),
-  brand: text("brand"),
-  description: text("description"),
-  price: numeric("price", { precision: 12, scale: 2 }).notNull(),
-  costPrice: numeric("cost_price", { precision: 12, scale: 2 }),
-  wholesalePrice: numeric("wholesale_price", { precision: 12, scale: 2 }),
-  stockQuantity: integer("stock_quantity").notNull().default(0),
-  reservedQuantity: integer("reserved_quantity").notNull().default(0),
-  lowStockThreshold: integer("low_stock_threshold").default(5),
-  reorderQuantity: integer("reorder_quantity"),
-  unit: text("unit").default("piece"),
-  imageUrl: text("image_url"),
-  isActive: boolean("is_active").notNull().default(true),
-  isFeatured: boolean("is_featured").notNull().default(false),
-  taxRate: numeric("tax_rate", { precision: 5, scale: 2 }).default("16"),
-  supplierId: integer("supplier_id").references(() => suppliersTable.id),
-  createdBy: integer("created_by").references(() => usersTable.id),
-  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
-});
-
-export const stockMovementsTable = pgTable("stock_movements", {
-  id: serial("id").primaryKey(),
-  productId: integer("product_id").notNull().references(() => productsTable.id),
-  type: stockMovementTypeEnum("type").notNull(),
-  quantity: integer("quantity").notNull(),
-  referenceType: text("reference_type"),
-  referenceId: integer("reference_id"),
-  costPrice: numeric("cost_price", { precision: 12, scale: 2 }),
-  notes: text("notes"),
-  createdBy: integer("created_by").references(() => usersTable.id),
-  branchId: integer("branch_id").references(() => branchesTable.id),
-  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-});
-
-export const insertCategorySchema = createInsertSchema(categoriesTable).omit({ id: true, createdAt: true });
-export const insertProductSchema = createInsertSchema(productsTable).omit({ id: true, createdAt: true, updatedAt: true });
-export const insertSupplierSchema = createInsertSchema(suppliersTable).omit({ id: true, createdAt: true });
-
-export type Category = typeof categoriesTable.$inferSelect;
-export type Product = typeof productsTable.$inferSelect;
-export type StockMovement = typeof stockMovementsTable.$inferSelect;
-export type Supplier = typeof suppliersTable.$inferSelect;
-export type InsertCategory = z.infer<typeof insertCategorySchema>;
 export type InsertProduct = z.infer<typeof insertProductSchema>;
+export type Product = typeof productsTable.$inferSelect;

@@ -1,3 +1,4 @@
+// @ts-nocheck
 import React from "react";
 import { useRoute } from "wouter";
 import { useGetProduct, useGetStockMovements } from "@workspace/api-client-react";

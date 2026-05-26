@@ -1,88 +1,75 @@
-import { pgTable, text, serial, timestamp, integer, numeric, pgEnum } from "drizzle-orm/pg-core";
+import { sqliteTable, text, integer, index } from "drizzle-orm/sqlite-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
-import { usersTable, branchesTable } from "./users";
 import { customersTable } from "./customers";
 import { productsTable } from "./products";
+import { money } from "./_columns";
 
-export const invoiceStatusEnum = pgEnum("invoice_status", ["unpaid", "partial", "paid", "voided"]);
-export const quotationStatusEnum = pgEnum("quotation_status", ["draft", "sent", "accepted", "rejected", "expired"]);
-
-export const invoicesTable = pgTable("invoices", {
-  id: serial("id").primaryKey(),
+export const invoicesTable = sqliteTable("invoices", {
+  id: integer("id").primaryKey(),
   invoiceNumber: text("invoice_number").notNull().unique(),
   customerId: integer("customer_id").references(() => customersTable.id),
-  cashierId: integer("cashier_id").references(() => usersTable.id),
-  branchId: integer("branch_id").references(() => branchesTable.id),
-  subtotal: numeric("subtotal", { precision: 12, scale: 2 }).notNull(),
-  discountAmount: numeric("discount_amount", { precision: 12, scale: 2 }).notNull().default("0"),
-  taxAmount: numeric("tax_amount", { precision: 12, scale: 2 }).notNull().default("0"),
-  total: numeric("total", { precision: 12, scale: 2 }).notNull(),
-  amountPaid: numeric("amount_paid", { precision: 12, scale: 2 }).notNull().default("0"),
-  balanceDue: numeric("balance_due", { precision: 12, scale: 2 }).notNull(),
-  paymentStatus: invoiceStatusEnum("payment_status").notNull().default("unpaid"),
-  dueDate: timestamp("due_date", { withTimezone: true }),
+  quotationId: integer("quotation_id"),
+  subtotal: money("subtotal").notNull().default(0),
+  discount: money("discount").notNull().default(0),
+  tax: money("tax").notNull().default(0),
+  total: money("total").notNull().default(0),
+  amountPaid: money("amount_paid").notNull().default(0),
+  balance: money("balance").notNull().default(0),
+  status: text("status").notNull().default("UNPAID"),
+  dueDate: text("due_date"),
   notes: text("notes"),
-  terms: text("terms"),
-  footer: text("footer"),
-  sentAt: timestamp("sent_at", { withTimezone: true }),
-  paidAt: timestamp("paid_at", { withTimezone: true }),
-  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
-});
+  createdAt: integer("created_at", { mode: "timestamp" }).notNull().defaultNow(),
+  updatedAt: integer("updated_at", { mode: "timestamp" }).notNull().defaultNow().$onUpdate(() => new Date()),
+}, (t) => ({
+  invoiceNumberIdx: index("invoices_invoice_number_idx").on(t.invoiceNumber),
+  customerIdIdx: index("invoices_customer_id_idx").on(t.customerId),
+  createdAtIdx: index("invoices_created_at_idx").on(t.createdAt),
+  statusIdx: index("invoices_status_idx").on(t.status),
+}));
 
-export const invoiceItemsTable = pgTable("invoice_items", {
-  id: serial("id").primaryKey(),
+export const invoiceItemsTable = sqliteTable("invoice_items", {
+  id: integer("id").primaryKey(),
   invoiceId: integer("invoice_id").notNull().references(() => invoicesTable.id),
+  itemName: text("item_name"),
   description: text("description").notNull(),
   productId: integer("product_id").references(() => productsTable.id),
-  quantity: numeric("quantity", { precision: 12, scale: 2 }).notNull(),
-  unitPrice: numeric("unit_price", { precision: 12, scale: 2 }).notNull(),
-  discount: numeric("discount", { precision: 12, scale: 2 }).notNull().default("0"),
-  taxRate: numeric("tax_rate", { precision: 5, scale: 2 }).notNull().default("0"),
-  total: numeric("total", { precision: 12, scale: 2 }).notNull(),
-  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  quantity: integer("quantity").notNull(),
+  unitPrice: money("unit_price").notNull(),
+  total: money("total").notNull(),
 });
 
-export const invoicePaymentsTable = pgTable("invoice_payments", {
-  id: serial("id").primaryKey(),
-  invoiceId: integer("invoice_id").notNull().references(() => invoicesTable.id),
-  amount: numeric("amount", { precision: 12, scale: 2 }).notNull(),
-  method: text("method").notNull(),
-  reference: text("reference"),
-  notes: text("notes"),
-  createdBy: integer("created_by").references(() => usersTable.id),
-  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-});
-
-export const quotationsTable = pgTable("quotations", {
-  id: serial("id").primaryKey(),
+export const quotationsTable = sqliteTable("quotations", {
+  id: integer("id").primaryKey(),
   quotationNumber: text("quotation_number").notNull().unique(),
   customerId: integer("customer_id").references(() => customersTable.id),
-  cashierId: integer("cashier_id").references(() => usersTable.id),
-  subtotal: numeric("subtotal", { precision: 12, scale: 2 }).notNull(),
-  discountAmount: numeric("discount_amount", { precision: 12, scale: 2 }).notNull().default("0"),
-  taxAmount: numeric("tax_amount", { precision: 12, scale: 2 }).notNull().default("0"),
-  total: numeric("total", { precision: 12, scale: 2 }).notNull(),
-  status: quotationStatusEnum("status").notNull().default("draft"),
-  validUntil: timestamp("valid_until", { withTimezone: true }),
+  subtotal: money("subtotal").notNull().default(0),
+  discount: money("discount").notNull().default(0),
+  tax: money("tax").notNull().default(0),
+  total: money("total").notNull().default(0),
+  status: text("status").notNull().default("DRAFT"),
+  validUntil: text("valid_until"),
   notes: text("notes"),
-  terms: text("terms"),
   convertedToInvoiceId: integer("converted_to_invoice_id").references(() => invoicesTable.id),
-  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
-});
+  createdBy: integer("created_by"),
+  createdAt: integer("created_at", { mode: "timestamp" }).notNull().defaultNow(),
+  updatedAt: integer("updated_at", { mode: "timestamp" }).notNull().defaultNow().$onUpdate(() => new Date()),
+}, (t) => ({
+  quotationNumberIdx: index("quotations_quotation_number_idx").on(t.quotationNumber),
+  customerIdIdx: index("quotations_customer_id_idx").on(t.customerId),
+  createdAtIdx: index("quotations_created_at_idx").on(t.createdAt),
+  statusIdx: index("quotations_status_idx").on(t.status),
+}));
 
-export const quotationItemsTable = pgTable("quotation_items", {
-  id: serial("id").primaryKey(),
+export const quotationItemsTable = sqliteTable("quotation_items", {
+  id: integer("id").primaryKey(),
   quotationId: integer("quotation_id").notNull().references(() => quotationsTable.id),
+  itemName: text("item_name"),
   description: text("description").notNull(),
   productId: integer("product_id").references(() => productsTable.id),
-  quantity: numeric("quantity", { precision: 12, scale: 2 }).notNull(),
-  unitPrice: numeric("unit_price", { precision: 12, scale: 2 }).notNull(),
-  discount: numeric("discount", { precision: 12, scale: 2 }).notNull().default("0"),
-  total: numeric("total", { precision: 12, scale: 2 }).notNull(),
-  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  quantity: integer("quantity").notNull(),
+  unitPrice: money("unit_price").notNull(),
+  total: money("total").notNull(),
 });
 
 export const insertInvoiceSchema = createInsertSchema(invoicesTable).omit({ id: true, createdAt: true, updatedAt: true });

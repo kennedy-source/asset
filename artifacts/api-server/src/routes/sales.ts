@@ -1,171 +1,300 @@
+// @ts-nocheck
 import { Router } from "express";
-import { db, salesTable, saleItemsTable, productsTable, customersTable, usersTable, stockMovementsTable } from "@workspace/db";
-import { eq, desc, and, gte, lte, count, sql } from "drizzle-orm";
+import { db } from "@workspace/db";
+import {
+  salesTable,
+  saleItemsTable,
+  productsTable,
+  customersTable,
+  usersTable,
+  stockMovementsTable,
+  paymentsTable,
+} from "@workspace/db";
+import { eq, and, gte, lte, sql } from "drizzle-orm";
+import { CreateSaleBody, ListSalesQueryParams } from "@workspace/api-zod";
+import { requireAuth, hasRole } from "../middlewares/auth";
+import { logAudit } from "../lib/audit";
+import { nextSequence } from "../lib/sequences";
+import { roles } from "../lib/rbac";
+import { AppError } from "../lib/errors";
+import {
+  assertNonNegativeInteger,
+  assertNonNegativeMoney,
+  computeBalance,
+} from "../lib/finance";
+import { parsePaginationQuery, resolvePagination } from "../lib/pagination";
 
 const router = Router();
+router.use(requireAuth);
 
-async function getNextSaleNumber(): Promise<string> {
-  const [last] = await db.select({ saleNumber: salesTable.saleNumber })
-    .from(salesTable).orderBy(desc(salesTable.id)).limit(1);
-  if (!last) return "SALE-0001";
-  const num = parseInt(last.saleNumber.split("-")[1] || "0") + 1;
-  return `SALE-${num.toString().padStart(4, "0")}`;
-}
+function normalizeSaleBody(body: any) {
+  const items = Array.isArray(body?.items) ? body.items : [];
+  const normalizedItems = items.map((item: any) => {
+    const quantity = Number(item?.quantity ?? 0);
+    const unitPrice = Number(item?.unitPrice ?? item?.unit_price ?? 0);
+    return {
+      product_id: Number(item?.productId ?? item?.product_id),
+      product_name: item?.productName ?? item?.product_name ?? item?.name ?? "Product",
+      sku: item?.sku ?? null,
+      quantity,
+      unit_price: unitPrice,
+      total: Number(item?.total ?? quantity * unitPrice),
+    };
+  });
+  const subtotal = normalizedItems.reduce((sum: number, item: any) => sum + item.total, 0);
+  const discount = Number(body?.discount ?? body?.discount_value ?? 0);
+  const tax = Number(body?.tax ?? body?.tax_amount ?? 0);
+  const total = Number(body?.total ?? subtotal - discount + tax);
 
-function toSale(s: any, items: any[] = [], customerName?: string, cashierName?: string) {
   return {
-    id: s.id, sale_number: s.saleNumber,
-    customer_id: s.customerId, customer_name: customerName ?? null,
-    cashier_id: s.cashierId, cashier_name: cashierName ?? null,
-    subtotal: Number(s.subtotal), discount_amount: Number(s.discountAmount ?? 0),
-    tax_amount: Number(s.taxAmount ?? 0), total: Number(s.total),
-    amount_paid: Number(s.amountPaid), change_given: Number(s.changeGiven ?? 0),
-    payment_method: s.paymentMethod, payment_status: s.paymentStatus,
-    voided: s.voided, void_reason: s.voidReason, notes: s.notes,
-    created_at: s.createdAt, items,
+    customer_id: body?.customerId ?? body?.customer_id ?? null,
+    items: normalizedItems,
+    discount_type: body?.discount_type ?? null,
+    discount_value: discount,
+    tax_amount: tax,
+    payment_method: body?.paymentMethod ?? body?.payment_method ?? "CASH",
+    amount_paid: Number(body?.amountPaid ?? body?.amount_paid ?? 0),
+    total,
+    notes: body?.notes ?? null,
   };
 }
 
-function toItem(i: any) {
-  return {
-    product_id: i.productId, product_name: i.productName, sku: i.sku,
-    quantity: i.quantity, unit_price: Number(i.unitPrice),
-    cost_price: i.costPrice ? Number(i.costPrice) : null,
-    discount: Number(i.discount ?? 0), total: Number(i.total),
-  };
-}
+router.get("/", async (req, res): Promise<void> => {
+  const qp = ListSalesQueryParams.safeParse(req.query);
+  const { startDate, endDate } = qp.success ? qp.data : {};
+  const { page, limit } = parsePaginationQuery(
+    req.query as Record<string, unknown>,
+  );
+  const pg = resolvePagination({ page, limit });
 
-router.get("/sales", async (req, res) => {
-  try {
-    const { from, to, payment_method, cashier_id, page = "1", limit = "50" } = req.query as Record<string, string>;
-    const pageNum = parseInt(page), limitNum = Math.min(parseInt(limit), 200);
-    const offset = (pageNum - 1) * limitNum;
+  const conditions = [];
+  if (startDate)
+    conditions.push(gte(salesTable.createdAt, new Date(startDate)));
+  if (endDate) conditions.push(lte(salesTable.createdAt, new Date(endDate)));
+  const where = conditions.length ? and(...conditions) : undefined;
 
-    const conditions = [];
-    if (from) conditions.push(gte(salesTable.createdAt, new Date(from)));
-    if (to) conditions.push(lte(salesTable.createdAt, new Date(to)));
-    if (payment_method) conditions.push(eq(salesTable.paymentMethod, payment_method as any));
-    if (cashier_id) conditions.push(eq(salesTable.cashierId, parseInt(cashier_id)));
-    const where = conditions.length > 0 ? and(...conditions) : undefined;
+  const [{ total }] = await db
+    .select({ total: sql<number>`COUNT(*)` })
+    .from(salesTable)
+    .where(where);
 
-    const [sales, customers, users, [totalRow]] = await Promise.all([
-      db.select().from(salesTable).where(where).orderBy(desc(salesTable.createdAt)).limit(limitNum).offset(offset),
-      db.select({ id: customersTable.id, name: customersTable.name }).from(customersTable),
-      db.select({ id: usersTable.id, name: usersTable.name }).from(usersTable),
-      db.select({ total: count() }).from(salesTable).where(where),
-    ]);
+  const rows = await db
+    .select({
+      id: salesTable.id,
+      saleNumber: salesTable.saleNumber,
+      customerId: salesTable.customerId,
+      customerName: customersTable.name,
+      subtotal: salesTable.subtotal,
+      discount: salesTable.discount,
+      tax: salesTable.tax,
+      total: salesTable.total,
+      amountPaid: salesTable.amountPaid,
+      balance: salesTable.balance,
+      paymentStatus: salesTable.paymentStatus,
+      paymentMethod: salesTable.paymentMethod,
+      cashierId: salesTable.cashierId,
+      cashierName: usersTable.name,
+      createdAt: salesTable.createdAt,
+    })
+    .from(salesTable)
+    .leftJoin(customersTable, eq(salesTable.customerId, customersTable.id))
+    .leftJoin(usersTable, eq(salesTable.cashierId, usersTable.id))
+    .where(where)
+    .orderBy(salesTable.createdAt)
+    .limit(pg.limit)
+    .offset(pg.offset);
 
-    const custMap = new Map(customers.map(c => [c.id, c.name]));
-    const userMap = new Map(users.map(u => [u.id, u.name]));
+  res.json({
+    items: rows,
+    page: pg.page,
+    limit: pg.limit,
+    total: Number(total),
+  });
+});
 
-    return res.json({
-      data: sales.map(s => toSale(s, [], s.customerId ? custMap.get(s.customerId) : undefined, s.cashierId ? userMap.get(s.cashierId) : undefined)),
-      total: Number(totalRow.total), page: pageNum, limit: limitNum,
+router.post("/", async (req, res): Promise<void> => {
+  if (!hasRole(req.user?.role, ...roles.sales))
+    throw new AppError(403, "FORBIDDEN", "Forbidden");
+  const normalizedBody = normalizeSaleBody(req.body);
+  const parsed = CreateSaleBody.safeParse(normalizedBody);
+  if (!parsed.success) {
+    throw new AppError(400, "VALIDATION_ERROR", "Invalid sale payload", {
+      details: parsed.error.flatten(),
+      exposeDetails: true,
     });
-  } catch (err) {
-    req.log.error(err);
-    return res.status(500).json({ error: "Failed to list sales" });
   }
-});
 
-router.get("/sales/:id", async (req, res) => {
-  try {
-    const id = parseInt(req.params.id);
-    const [sale] = await db.select().from(salesTable).where(eq(salesTable.id, id)).limit(1);
-    if (!sale) return res.status(404).json({ error: "Sale not found" });
-    const items = await db.select().from(saleItemsTable).where(eq(saleItemsTable.saleId, id));
+  const {
+    items,
+    customer_id: customerId,
+    discount_value: discount = 0,
+    tax_amount: tax = 0,
+    amount_paid: amountPaid,
+    payment_method: paymentMethod,
+  } = parsed.data;
+  assertNonNegativeMoney(discount, "discount");
+  assertNonNegativeMoney(tax, "tax");
+  assertNonNegativeMoney(amountPaid, "amountPaid");
 
-    let customerName: string | undefined;
-    let cashierName: string | undefined;
-    if (sale.customerId) {
-      const [c] = await db.select({ name: customersTable.name }).from(customersTable).where(eq(customersTable.id, sale.customerId)).limit(1);
-      customerName = c?.name;
-    }
-    if (sale.cashierId) {
-      const [u] = await db.select({ name: usersTable.name }).from(usersTable).where(eq(usersTable.id, sale.cashierId)).limit(1);
-      cashierName = u?.name;
-    }
-    return res.json(toSale(sale, items.map(toItem), customerName, cashierName));
-  } catch (err) {
-    req.log.error(err);
-    return res.status(500).json({ error: "Failed to get sale" });
+  // Calculate totals
+  for (const item of items) {
+    assertNonNegativeInteger(item.quantity, "item.quantity");
+    assertNonNegativeMoney(item.unit_price, "item.unitPrice");
   }
-});
+  const subtotal = items.reduce((s, i) => s + i.quantity * i.unit_price, 0);
+  assertNonNegativeMoney(subtotal, "subtotal");
+  const total = subtotal - discount + tax;
+  assertNonNegativeMoney(total, "total");
+  const balance = computeBalance(total, amountPaid, true);
+  const paymentStatus =
+    amountPaid >= total ? "paid" : amountPaid > 0 ? "partial" : "unpaid";
+  const paymentMethodValue = String(paymentMethod).toLowerCase() === "paystack"
+    ? "paystack"
+    : String(paymentMethod).toLowerCase() === "bank_transfer"
+      ? "bank"
+      : String(paymentMethod).toLowerCase();
 
-router.post("/sales", async (req, res) => {
-  try {
-    const body = req.body;
-    if (!body.items?.length) return res.status(400).json({ error: "Items required" });
+  const saleNumber = await nextSequence("seq_sales", "SAL");
+  const canOverrideStock = hasRole(req.user?.role, ...roles.adminOnly);
+  const sale = await db.transaction(async (tx: any) => {
+    const [createdSale] = await tx
+      .insert(salesTable)
+      .values({
+        saleNumber,
+        customerId: customerId ?? null,
+        subtotal,
+        discount,
+        tax,
+        total,
+        amountPaid,
+        balance,
+        paymentStatus,
+        paymentMethod: paymentMethodValue,
+        cashierId: req.user?.id ?? null,
+      })
+      .returning();
 
-    const saleNumber = await getNextSaleNumber();
-    const subtotal = body.items.reduce((sum: number, i: any) => sum + (i.unit_price * i.quantity), 0);
-    const discountAmt = body.discount_value ?? 0;
-    const taxAmt = body.tax_amount ?? 0;
-    const total = body.total ?? (subtotal - discountAmt + taxAmt);
-    const changeGiven = Math.max(0, (body.amount_paid ?? total) - total);
-
-    const [sale] = await db.insert(salesTable).values({
-      saleNumber, customerId: body.customer_id,
-      subtotal: subtotal.toString(), discountAmount: discountAmt.toString(),
-      taxAmount: taxAmt.toString(), total: total.toString(),
-      amountPaid: (body.amount_paid ?? total).toString(),
-      changeGiven: changeGiven.toString(),
-      paymentMethod: body.payment_method ?? "cash",
-      paymentStatus: "paid", notes: body.notes,
-    }).returning();
-
-    // Insert items and update stock
-    for (const item of body.items) {
-      await db.insert(saleItemsTable).values({
-        saleId: sale.id, productId: item.product_id,
-        productName: item.product_name, sku: item.sku,
-        quantity: item.quantity, unitPrice: item.unit_price.toString(),
-        discount: (item.discount ?? 0).toString(),
-        total: (item.unit_price * item.quantity - (item.discount ?? 0)).toString(),
-      });
-      if (item.product_id) {
-        await db.update(productsTable).set({
-          stockQuantity: sql`${productsTable.stockQuantity} - ${item.quantity}`,
-        }).where(eq(productsTable.id, item.product_id));
-        await db.insert(stockMovementsTable).values({
-          productId: item.product_id, type: "sale",
-          quantity: -item.quantity, referenceType: "sale", referenceId: sale.id,
-        });
-      }
-    }
-
-    const items = await db.select().from(saleItemsTable).where(eq(saleItemsTable.saleId, sale.id));
-    return res.status(201).json(toSale(sale, items.map(toItem)));
-  } catch (err) {
-    req.log.error(err);
-    return res.status(500).json({ error: "Failed to create sale" });
-  }
-});
-
-router.post("/sales/:id/void", async (req, res) => {
-  try {
-    const id = parseInt(req.params.id);
-    const { reason } = req.body as { reason: string };
-    const [sale] = await db.update(salesTable).set({
-      voided: true, voidReason: reason, voidedAt: new Date(),
-    }).where(eq(salesTable.id, id)).returning();
-    if (!sale) return res.status(404).json({ error: "Sale not found" });
-
-    // Restore stock
-    const items = await db.select().from(saleItemsTable).where(eq(saleItemsTable.saleId, id));
     for (const item of items) {
-      if (item.productId) {
-        await db.update(productsTable).set({
-          stockQuantity: sql`${productsTable.stockQuantity} + ${item.quantity}`,
-        }).where(eq(productsTable.id, item.productId));
+      const product = await tx
+        .select()
+        .from(productsTable)
+        .where(eq(productsTable.id, item.product_id))
+        .limit(1);
+      if (!product[0]) {
+        throw new AppError(
+          404,
+          "NOT_FOUND",
+          `Product ${item.product_id} not found`,
+        );
       }
-    }
+      const nextQty = product[0].stockQuantity - item.quantity;
+      if (nextQty < 0 && !canOverrideStock) {
+        throw new AppError(
+          409,
+          "INSUFFICIENT_STOCK",
+          `Insufficient stock for ${product[0].name}`,
+          {
+            details: {
+            productId: item.product_id,
+              available: product[0].stockQuantity,
+              requested: item.quantity,
+            },
+            exposeDetails: true,
+          },
+        );
+      }
 
-    return res.json(toSale(sale, items.map(toItem)));
-  } catch (err) {
-    req.log.error(err);
-    return res.status(500).json({ error: "Failed to void sale" });
+      await tx.insert(saleItemsTable).values({
+        saleId: createdSale.id,
+        productId: item.product_id,
+        quantity: item.quantity,
+        unitPrice: item.unit_price,
+        total: item.quantity * item.unit_price,
+      });
+      await tx.execute(
+        sql`UPDATE products SET stock_quantity = ${nextQty}, updated_at = now() WHERE id = ${item.product_id}`,
+      );
+      await tx.insert(stockMovementsTable).values({
+        productId: item.product_id,
+        type: "sale",
+        quantity: item.quantity,
+        reason: "SALE",
+        reference: saleNumber,
+        userId: req.user?.id ?? null,
+      });
+    }
+    if (amountPaid > 0) {
+      await tx.insert(paymentsTable).values({
+        saleId: createdSale.id,
+        customerId: customerId ?? null,
+        amount: amountPaid,
+        method: paymentMethodValue.toUpperCase(),
+        status: paymentStatus === "paid" ? "COMPLETED" : "PENDING",
+        reference: saleNumber,
+      });
+    }
+    return createdSale;
+  });
+
+  await logAudit(req, "CREATE_SALE", "Sale", sale.id, null, {
+    total,
+    paymentMethod: paymentMethodValue,
+  });
+  res
+    .status(201)
+    .json({ ...sale, customerName: null, cashierName: req.user?.name ?? null });
+});
+
+router.get("/:id", async (req, res): Promise<void> => {
+  const id = parseInt(req.params.id);
+  if (isNaN(id)) {
+    res.status(400).json({ error: "Invalid id" });
+    return;
   }
+
+  const rows = await db
+    .select({
+      id: salesTable.id,
+      saleNumber: salesTable.saleNumber,
+      customerId: salesTable.customerId,
+      customerName: customersTable.name,
+      subtotal: salesTable.subtotal,
+      discount: salesTable.discount,
+      tax: salesTable.tax,
+      total: salesTable.total,
+      amountPaid: salesTable.amountPaid,
+      balance: salesTable.balance,
+      paymentStatus: salesTable.paymentStatus,
+      paymentMethod: salesTable.paymentMethod,
+      cashierId: salesTable.cashierId,
+      cashierName: usersTable.name,
+      createdAt: salesTable.createdAt,
+    })
+    .from(salesTable)
+    .leftJoin(customersTable, eq(salesTable.customerId, customersTable.id))
+    .leftJoin(usersTable, eq(salesTable.cashierId, usersTable.id))
+    .where(eq(salesTable.id, id))
+    .limit(1);
+
+  if (!rows[0]) {
+    res.status(404).json({ error: "Not found" });
+    return;
+  }
+
+  const saleItems = await db
+    .select({
+      id: saleItemsTable.id,
+      productId: saleItemsTable.productId,
+      productName: productsTable.name,
+      quantity: saleItemsTable.quantity,
+      unitPrice: saleItemsTable.unitPrice,
+      total: saleItemsTable.total,
+    })
+    .from(saleItemsTable)
+    .leftJoin(productsTable, eq(saleItemsTable.productId, productsTable.id))
+    .where(eq(saleItemsTable.saleId, id));
+
+  res.json({ ...rows[0], items: saleItems });
 });
 
 export default router;

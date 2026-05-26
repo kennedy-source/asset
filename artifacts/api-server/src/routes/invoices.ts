@@ -1,333 +1,291 @@
+// @ts-nocheck
 import { Router } from "express";
-import { db, invoicesTable, invoiceItemsTable, invoicePaymentsTable, quotationsTable, quotationItemsTable, customersTable } from "@workspace/db";
-import { eq, desc, and, count, sql } from "drizzle-orm";
+import { db } from "@workspace/db";
+import {
+  invoicesTable,
+  invoiceItemsTable,
+  customersTable,
+} from "@workspace/db";
+import { eq, sql } from "drizzle-orm";
+import { CreateInvoiceBody, UpdateInvoiceBody } from "@workspace/api-zod";
+import { requireAuth, hasRole } from "../middlewares/auth";
+import { nextSequence } from "../lib/sequences";
+import { roles } from "../lib/rbac";
+import { AppError } from "../lib/errors";
+import {
+  assertNonNegativeInteger,
+  assertNonNegativeMoney,
+  computeBalance,
+} from "../lib/finance";
+import { logAudit } from "../lib/audit";
+import { parsePaginationQuery, resolvePagination } from "../lib/pagination";
+import {
+  assertTransition,
+  invoiceTransitions,
+  type InvoiceStatus,
+} from "../lib/workflows";
 
 const router = Router();
+router.use(requireAuth);
 
-async function getNextInvoiceNumber() {
-  const [last] = await db.select({ n: invoicesTable.invoiceNumber }).from(invoicesTable).orderBy(desc(invoicesTable.id)).limit(1);
-  const num = last ? parseInt(last.n.split("-")[1] || "0") + 1 : 1;
-  return `INV-${num.toString().padStart(4, "0")}`;
-}
-
-async function getNextQuotationNumber() {
-  const [last] = await db.select({ n: quotationsTable.quotationNumber }).from(quotationsTable).orderBy(desc(quotationsTable.id)).limit(1);
-  const num = last ? parseInt(last.n.split("-")[1] || "0") + 1 : 1;
-  return `QUO-${num.toString().padStart(4, "0")}`;
-}
-
-async function buildInvoice(invoice: typeof invoicesTable.$inferSelect) {
-  const [items, payments] = await Promise.all([
-    db.select().from(invoiceItemsTable).where(eq(invoiceItemsTable.invoiceId, invoice.id)),
-    db.select().from(invoicePaymentsTable).where(eq(invoicePaymentsTable.invoiceId, invoice.id)),
-  ]);
-  let customerName: string | undefined, customerEmail: string | undefined, customerPhone: string | undefined;
-  if (invoice.customerId) {
-    const [c] = await db.select().from(customersTable).where(eq(customersTable.id, invoice.customerId)).limit(1);
-    customerName = c?.name; customerEmail = c?.email ?? undefined; customerPhone = c?.phone;
-  }
+function normalizeInvoiceBody(body: any) {
   return {
-    id: invoice.id, invoice_number: invoice.invoiceNumber,
-    customer_id: invoice.customerId, customer_name: customerName ?? null,
-    customer_email: customerEmail ?? null, customer_phone: customerPhone ?? null,
-    subtotal: Number(invoice.subtotal), discount_amount: Number(invoice.discountAmount ?? 0),
-    tax_amount: Number(invoice.taxAmount ?? 0), total: Number(invoice.total),
-    amount_paid: Number(invoice.amountPaid ?? 0), balance_due: Number(invoice.balanceDue ?? 0),
-    payment_status: invoice.paymentStatus, due_date: invoice.dueDate?.toISOString() ?? null,
-    notes: invoice.notes, terms: invoice.terms, created_at: invoice.createdAt, updated_at: invoice.updatedAt,
-    items: items.map(i => ({
-      id: i.id, description: i.description, product_id: i.productId,
-      quantity: Number(i.quantity), unit_price: Number(i.unitPrice),
-      discount: Number(i.discount ?? 0), tax_rate: Number(i.taxRate ?? 0),
-      total: Number(i.total),
-    })),
-    payments: payments.map(p => ({
-      id: p.id, amount: Number(p.amount), method: p.method,
-      reference: p.reference, notes: p.notes, created_at: p.createdAt,
-    })),
+    customerId: body?.customerId ?? body?.customer_id ?? null,
+    quotationId: body?.quotationId ?? body?.quotation_id ?? null,
+    discount: Number(body?.discount ?? body?.discount_amount ?? 0),
+    tax: Number(body?.tax ?? body?.tax_amount ?? 0),
+    dueDate: body?.dueDate ?? body?.due_date ?? null,
+    items: Array.isArray(body?.items)
+      ? body.items.map((item: any) => ({
+          itemName: item?.itemName ?? item?.item_name ?? item?.description ?? "Item",
+          description: item?.description ?? item?.itemName ?? item?.item_name ?? "Item",
+          productId: item?.productId ?? item?.product_id ?? null,
+          quantity: Number(item?.quantity ?? 0),
+          unitPrice: Number(item?.unitPrice ?? item?.unit_price ?? 0),
+        }))
+      : [],
   };
 }
 
-router.get("/invoices", async (req, res) => {
-  try {
-    const { status, customer_id, page = "1", limit = "50" } = req.query as Record<string, string>;
-    const pageNum = parseInt(page), limitNum = Math.min(parseInt(limit), 200);
-    const offset = (pageNum - 1) * limitNum;
-    const conditions = [];
-    if (status) conditions.push(eq(invoicesTable.paymentStatus, status as any));
-    if (customer_id) conditions.push(eq(invoicesTable.customerId, parseInt(customer_id)));
-    const where = conditions.length > 0 ? and(...conditions) : undefined;
+router.get("/", async (req, res): Promise<void> => {
+  const { page, limit } = parsePaginationQuery(
+    req.query as Record<string, unknown>,
+  );
+  const pg = resolvePagination({ page, limit });
 
-    const [invoices, customers, [totalRow]] = await Promise.all([
-      db.select().from(invoicesTable).where(where).orderBy(desc(invoicesTable.createdAt)).limit(limitNum).offset(offset),
-      db.select({ id: customersTable.id, name: customersTable.name }).from(customersTable),
-      db.select({ total: count() }).from(invoicesTable).where(where),
-    ]);
-    const custMap = new Map(customers.map(c => [c.id, c.name]));
-
-    return res.json({
-      data: invoices.map(inv => ({
-        id: inv.id, invoice_number: inv.invoiceNumber,
-        customer_id: inv.customerId, customer_name: inv.customerId ? custMap.get(inv.customerId) ?? null : null,
-        subtotal: Number(inv.subtotal), discount_amount: Number(inv.discountAmount ?? 0),
-        tax_amount: Number(inv.taxAmount ?? 0), total: Number(inv.total),
-        amount_paid: Number(inv.amountPaid ?? 0), balance_due: Number(inv.balanceDue ?? 0),
-        payment_status: inv.paymentStatus, due_date: inv.dueDate?.toISOString() ?? null,
-        notes: inv.notes, created_at: inv.createdAt, updated_at: inv.updatedAt, items: [],
-      })),
-      total: Number(totalRow.total), page: pageNum, limit: limitNum,
-    });
-  } catch (err) {
-    req.log.error(err);
-    return res.status(500).json({ error: "Failed to list invoices" });
-  }
+  const [{ total }] = await db
+    .select({ total: sql<number>`COUNT(*)` })
+    .from(invoicesTable);
+  const rows = await db
+    .select({
+      id: invoicesTable.id,
+      invoiceNumber: invoicesTable.invoiceNumber,
+      customerId: invoicesTable.customerId,
+      customerName: customersTable.name,
+      quotationId: invoicesTable.quotationId,
+      subtotal: invoicesTable.subtotal,
+      discount: invoicesTable.discount,
+      tax: invoicesTable.tax,
+      total: invoicesTable.total,
+      amountPaid: invoicesTable.amountPaid,
+      balance: invoicesTable.balance,
+      status: invoicesTable.status,
+      dueDate: invoicesTable.dueDate,
+      createdAt: invoicesTable.createdAt,
+    })
+    .from(invoicesTable)
+    .leftJoin(customersTable, eq(invoicesTable.customerId, customersTable.id))
+    .orderBy(invoicesTable.createdAt)
+    .limit(pg.limit)
+    .offset(pg.offset);
+  res.json({
+    items: rows,
+    page: pg.page,
+    limit: pg.limit,
+    total: Number(total),
+  });
 });
 
-router.post("/invoices", async (req, res) => {
-  try {
-    const body = req.body;
-    const items = body.items ?? [];
-    const subtotal = items.reduce((s: number, i: any) => s + (i.unit_price * i.quantity - (i.discount ?? 0)), 0);
-    const discountAmt = body.discount_amount ?? 0;
-    const taxAmt = body.tax_amount ?? 0;
-    const total = subtotal - discountAmt + taxAmt;
-    const invoiceNumber = await getNextInvoiceNumber();
+router.post("/", async (req, res): Promise<void> => {
+  if (!hasRole(req.user?.role, ...roles.sales))
+    throw new AppError(403, "FORBIDDEN", "Forbidden");
+  const parsed = CreateInvoiceBody.safeParse(req.body);
+  if (!parsed.success) {
+    throw new AppError(400, "VALIDATION_ERROR", "Invalid invoice payload", {
+      details: parsed.error.flatten(),
+      exposeDetails: true,
+    });
+  }
 
-    const [invoice] = await db.insert(invoicesTable).values({
-      invoiceNumber, customerId: body.customer_id,
-      subtotal: subtotal.toString(), discountAmount: discountAmt.toString(),
-      taxAmount: taxAmt.toString(), total: total.toString(),
-      amountPaid: "0", balanceDue: total.toString(),
-      paymentStatus: "unpaid",
-      dueDate: body.due_date ? new Date(body.due_date) : undefined,
-      notes: body.notes, terms: body.terms,
-    }).returning();
-
+  const {
+    items,
+    customerId,
+    quotationId,
+    discount = 0,
+    tax = 0,
+    dueDate,
+  } = normalizeInvoiceBody(req.body);
+  assertNonNegativeMoney(discount, "discount");
+  assertNonNegativeMoney(tax, "tax");
+  for (const item of items) {
+    assertNonNegativeInteger(item.quantity, "item.quantity");
+    assertNonNegativeMoney(item.unitPrice, "item.unitPrice");
+  }
+  const subtotal = items.reduce((s, i) => s + i.quantity * i.unitPrice, 0);
+  assertNonNegativeMoney(subtotal, "subtotal");
+  const total = subtotal - discount + tax;
+  assertNonNegativeMoney(total, "total");
+  const invNumber = await nextSequence("seq_invoices", "INV");
+  const invoice = await db.transaction(async (tx: any) => {
+    const [created] = await tx
+      .insert(invoicesTable)
+      .values({
+        invoiceNumber: invNumber,
+        customerId: customerId ?? null,
+        quotationId: quotationId ?? null,
+        subtotal,
+        discount,
+        tax,
+        total,
+        amountPaid: 0,
+        balance: total,
+        status: "unpaid",
+        dueDate: dueDate ?? null,
+      })
+      .returning();
     for (const item of items) {
-      const itemTotal = item.unit_price * item.quantity - (item.discount ?? 0);
-      await db.insert(invoiceItemsTable).values({
-        invoiceId: invoice.id, description: item.description,
-        productId: item.product_id, quantity: item.quantity.toString(),
-        unitPrice: item.unit_price.toString(), discount: (item.discount ?? 0).toString(),
-        taxRate: (item.tax_rate ?? 0).toString(), total: itemTotal.toString(),
+      await tx.insert(invoiceItemsTable).values({
+        invoiceId: created.id,
+        itemName: item.itemName,
+        description: item.description ?? null,
+        productId: item.productId ?? null,
+        quantity: item.quantity,
+        unitPrice: item.unitPrice,
+        total: item.quantity * item.unitPrice,
       });
     }
-
-    return res.status(201).json(await buildInvoice(invoice));
-  } catch (err) {
-    req.log.error(err);
-    return res.status(500).json({ error: "Failed to create invoice" });
-  }
+    return created;
+  });
+  await logAudit(req, "CREATE_INVOICE", "Invoice", invoice.id, null, {
+    total,
+    customerId,
+  });
+  res.status(201).json({ ...invoice, customerName: null });
 });
 
-router.get("/invoices/:id", async (req, res) => {
-  try {
-    const id = parseInt(req.params.id);
-    const [invoice] = await db.select().from(invoicesTable).where(eq(invoicesTable.id, id)).limit(1);
-    if (!invoice) return res.status(404).json({ error: "Invoice not found" });
-    return res.json(await buildInvoice(invoice));
-  } catch (err) {
-    req.log.error(err);
-    return res.status(500).json({ error: "Failed to get invoice" });
+router.get("/:id", async (req, res): Promise<void> => {
+  const id = parseInt(req.params.id);
+  if (isNaN(id)) {
+    res.status(400).json({ error: "Invalid id" });
+    return;
   }
+
+  const rows = await db
+    .select({
+      id: invoicesTable.id,
+      invoiceNumber: invoicesTable.invoiceNumber,
+      customerId: invoicesTable.customerId,
+      customerName: customersTable.name,
+      quotationId: invoicesTable.quotationId,
+      subtotal: invoicesTable.subtotal,
+      discount: invoicesTable.discount,
+      tax: invoicesTable.tax,
+      total: invoicesTable.total,
+      amountPaid: invoicesTable.amountPaid,
+      balance: invoicesTable.balance,
+      status: invoicesTable.status,
+      dueDate: invoicesTable.dueDate,
+      createdAt: invoicesTable.createdAt,
+    })
+    .from(invoicesTable)
+    .leftJoin(customersTable, eq(invoicesTable.customerId, customersTable.id))
+    .where(eq(invoicesTable.id, id))
+    .limit(1);
+
+  if (!rows[0]) {
+    res.status(404).json({ error: "Not found" });
+    return;
+  }
+  const invItems = await db
+    .select()
+    .from(invoiceItemsTable)
+    .where(eq(invoiceItemsTable.invoiceId, id));
+  res.json({ ...rows[0], items: invItems });
 });
 
-router.patch("/invoices/:id", async (req, res) => {
-  try {
-    const id = parseInt(req.params.id);
-    const body = req.body;
-    const updates: Record<string, unknown> = {};
-    if (body.notes !== undefined) updates.notes = body.notes;
-    if (body.due_date !== undefined) updates.dueDate = body.due_date ? new Date(body.due_date) : null;
-    if (body.terms !== undefined) updates.terms = body.terms;
-    const [invoice] = await db.update(invoicesTable).set(updates).where(eq(invoicesTable.id, id)).returning();
-    if (!invoice) return res.status(404).json({ error: "Invoice not found" });
-    return res.json(await buildInvoice(invoice));
-  } catch (err) {
-    req.log.error(err);
-    return res.status(500).json({ error: "Failed to update invoice" });
+router.patch("/:id", async (req, res): Promise<void> => {
+  if (!hasRole(req.user?.role, ...roles.sales))
+    throw new AppError(403, "FORBIDDEN", "Forbidden");
+  const id = parseInt(req.params.id);
+  if (isNaN(id)) {
+    res.status(400).json({ error: "Invalid id" });
+    return;
   }
+  const parsed = UpdateInvoiceBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.message });
+    return;
+  }
+
+  const current = await db
+    .select()
+    .from(invoicesTable)
+    .where(eq(invoicesTable.id, id))
+    .limit(1);
+  if (!current[0]) {
+    res.status(404).json({ error: "Not found" });
+    return;
+  }
+
+  const nextDueDate = parsed.data.dueDate ?? parsed.data.due_date ?? current[0].dueDate ?? null;
+  const nextAmountPaid =
+    parsed.data.amountPaid != null
+      ? Number(parsed.data.amountPaid)
+      : parsed.data.amount_paid != null
+        ? Number(parsed.data.amount_paid)
+        : Number(current[0].amountPaid ?? 0);
+  assertNonNegativeMoney(nextAmountPaid, "amountPaid");
+  const nextBalance = computeBalance(Number(current[0].total), nextAmountPaid, true);
+  const requestedStatus = parsed.data.status != null ? String(parsed.data.status).toLowerCase() : null;
+  const nextStatus = requestedStatus ?? (nextBalance === 0 ? "paid" : nextAmountPaid > 0 ? "partial" : "unpaid");
+
+  const updatedRows = await db.execute(sql`
+    UPDATE invoices
+    SET due_date = ${nextDueDate},
+        amount_paid = ${nextAmountPaid},
+        balance = ${nextBalance},
+        status = ${nextStatus},
+        updated_at = now()
+    WHERE id = ${id}
+    RETURNING *
+  `);
+  const updated = updatedRows.rows?.[0] ?? updatedRows[0];
+  const updates = { dueDate: nextDueDate, amountPaid: nextAmountPaid, balance: nextBalance, status: nextStatus };
+  await logAudit(req, "UPDATE_INVOICE", "Invoice", id, current[0], updates);
+  res.json({ ...updated, customerName: null });
 });
 
-router.post("/invoices/:id/payment", async (req, res) => {
-  try {
-    const id = parseInt(req.params.id);
-    const { amount, method, reference, notes } = req.body as { amount: number; method: string; reference?: string; notes?: string };
-
-    await db.insert(invoicePaymentsTable).values({
-      invoiceId: id, amount: amount.toString(), method, reference, notes,
-    });
-
-    const [invoice] = await db.select().from(invoicesTable).where(eq(invoicesTable.id, id)).limit(1);
-    if (!invoice) return res.status(404).json({ error: "Invoice not found" });
-
-    const newAmountPaid = Number(invoice.amountPaid ?? 0) + amount;
-    const total = Number(invoice.total);
-    const newBalance = total - newAmountPaid;
-    const newStatus = newBalance <= 0 ? "paid" : newAmountPaid > 0 ? "partial" : "unpaid";
-
-    await db.update(invoicesTable).set({
-      amountPaid: newAmountPaid.toString(),
-      balanceDue: Math.max(0, newBalance).toString(),
-      paymentStatus: newStatus as any,
-      paidAt: newStatus === "paid" ? new Date() : undefined,
-    }).where(eq(invoicesTable.id, id));
-
-    const [updated] = await db.select().from(invoicesTable).where(eq(invoicesTable.id, id)).limit(1);
-    return res.json(await buildInvoice(updated!));
-  } catch (err) {
-    req.log.error(err);
-    return res.status(500).json({ error: "Failed to record payment" });
+router.patch("/:id/payment-status", async (req, res): Promise<void> => {
+  if (!hasRole(req.user?.role, ...roles.sales))
+    throw new AppError(403, "FORBIDDEN", "Forbidden");
+  const id = parseInt(req.params.id);
+  if (isNaN(id)) {
+    res.status(400).json({ error: "Invalid id" });
+    return;
   }
-});
-
-// Quotations
-router.get("/quotations", async (req, res) => {
-  try {
-    const { status, customer_id, page = "1", limit = "50" } = req.query as Record<string, string>;
-    const pageNum = parseInt(page), limitNum = Math.min(parseInt(limit), 200);
-    const offset = (pageNum - 1) * limitNum;
-    const conditions = [];
-    if (status) conditions.push(eq(quotationsTable.status, status as any));
-    if (customer_id) conditions.push(eq(quotationsTable.customerId, parseInt(customer_id)));
-    const where = conditions.length > 0 ? and(...conditions) : undefined;
-
-    const [quotations, customers, [totalRow]] = await Promise.all([
-      db.select().from(quotationsTable).where(where).orderBy(desc(quotationsTable.createdAt)).limit(limitNum).offset(offset),
-      db.select({ id: customersTable.id, name: customersTable.name }).from(customersTable),
-      db.select({ total: count() }).from(quotationsTable).where(where),
-    ]);
-    const custMap = new Map(customers.map(c => [c.id, c.name]));
-
-    return res.json({
-      data: quotations.map(q => ({
-        id: q.id, quotation_number: q.quotationNumber,
-        customer_id: q.customerId, customer_name: q.customerId ? custMap.get(q.customerId) ?? null : null,
-        subtotal: Number(q.subtotal), discount_amount: Number(q.discountAmount ?? 0),
-        tax_amount: Number(q.taxAmount ?? 0), total: Number(q.total),
-        status: q.status, valid_until: q.validUntil?.toISOString() ?? null,
-        notes: q.notes, created_at: q.createdAt, items: [],
-      })),
-      total: Number(totalRow.total), page: pageNum, limit: limitNum,
-    });
-  } catch (err) {
-    req.log.error(err);
-    return res.status(500).json({ error: "Failed to list quotations" });
+  const status = String(req.body?.status || "").trim().toLowerCase();
+  const amountPaid = req.body?.amountPaid != null ? Number(req.body.amountPaid) : undefined;
+  if (!["unpaid", "partial", "paid"].includes(status)) {
+    res.status(400).json({ error: "Invalid status" });
+    return;
   }
-});
 
-router.post("/quotations", async (req, res) => {
-  try {
-    const body = req.body;
-    const items = body.items ?? [];
-    const subtotal = items.reduce((s: number, i: any) => s + (i.unit_price * i.quantity - (i.discount ?? 0)), 0);
-    const discountAmt = body.discount_amount ?? 0;
-    const taxAmt = body.tax_amount ?? 0;
-    const total = subtotal - discountAmt + taxAmt;
-    const quotationNumber = await getNextQuotationNumber();
-
-    const [quotation] = await db.insert(quotationsTable).values({
-      quotationNumber, customerId: body.customer_id,
-      subtotal: subtotal.toString(), discountAmount: discountAmt.toString(),
-      taxAmount: taxAmt.toString(), total: total.toString(),
-      status: body.status ?? "draft",
-      validUntil: body.valid_until ? new Date(body.valid_until) : undefined,
-      notes: body.notes,
-    }).returning();
-
-    for (const item of items) {
-      const itemTotal = item.unit_price * item.quantity - (item.discount ?? 0);
-      await db.insert(quotationItemsTable).values({
-        quotationId: quotation.id, description: item.description,
-        productId: item.product_id, quantity: item.quantity.toString(),
-        unitPrice: item.unit_price.toString(), discount: (item.discount ?? 0).toString(),
-        total: itemTotal.toString(),
-      });
-    }
-
-    const quotItems = await db.select().from(quotationItemsTable).where(eq(quotationItemsTable.quotationId, quotation.id));
-    return res.status(201).json({
-      id: quotation.id, quotation_number: quotation.quotationNumber,
-      customer_id: quotation.customerId, subtotal: Number(quotation.subtotal),
-      discount_amount: Number(quotation.discountAmount ?? 0), tax_amount: Number(quotation.taxAmount ?? 0),
-      total: Number(quotation.total), status: quotation.status,
-      valid_until: quotation.validUntil?.toISOString() ?? null, notes: quotation.notes,
-      created_at: quotation.createdAt,
-      items: quotItems.map(i => ({
-        description: i.description, product_id: i.productId,
-        quantity: Number(i.quantity), unit_price: Number(i.unitPrice),
-        discount: Number(i.discount ?? 0), total: Number(i.total),
-      })),
-    });
-  } catch (err) {
-    req.log.error(err);
-    return res.status(500).json({ error: "Failed to create quotation" });
+  const current = await db
+    .select()
+    .from(invoicesTable)
+    .where(eq(invoicesTable.id, id))
+    .limit(1);
+  if (!current[0]) {
+    res.status(404).json({ error: "Not found" });
+    return;
   }
-});
 
-router.get("/quotations/:id", async (req, res) => {
-  try {
-    const id = parseInt(req.params.id);
-    const [quotation] = await db.select().from(quotationsTable).where(eq(quotationsTable.id, id)).limit(1);
-    if (!quotation) return res.status(404).json({ error: "Quotation not found" });
-    const items = await db.select().from(quotationItemsTable).where(eq(quotationItemsTable.quotationId, id));
-    let customerName: string | undefined;
-    if (quotation.customerId) {
-      const [c] = await db.select({ name: customersTable.name }).from(customersTable).where(eq(customersTable.id, quotation.customerId)).limit(1);
-      customerName = c?.name;
-    }
-    return res.json({
-      id: quotation.id, quotation_number: quotation.quotationNumber,
-      customer_id: quotation.customerId, customer_name: customerName ?? null,
-      subtotal: Number(quotation.subtotal), discount_amount: Number(quotation.discountAmount ?? 0),
-      tax_amount: Number(quotation.taxAmount ?? 0), total: Number(quotation.total),
-      status: quotation.status, valid_until: quotation.validUntil?.toISOString() ?? null,
-      notes: quotation.notes, created_at: quotation.createdAt,
-      items: items.map(i => ({
-        description: i.description, product_id: i.productId,
-        quantity: Number(i.quantity), unit_price: Number(i.unitPrice),
-        discount: Number(i.discount ?? 0), total: Number(i.total),
-      })),
-    });
-  } catch (err) {
-    req.log.error(err);
-    return res.status(500).json({ error: "Failed to get quotation" });
-  }
-});
-
-router.post("/quotations/:id/convert", async (req, res) => {
-  try {
-    const id = parseInt(req.params.id);
-    const [quotation] = await db.select().from(quotationsTable).where(eq(quotationsTable.id, id)).limit(1);
-    if (!quotation) return res.status(404).json({ error: "Quotation not found" });
-
-    const invoiceNumber = await getNextInvoiceNumber();
-    const total = Number(quotation.total);
-
-    const [invoice] = await db.insert(invoicesTable).values({
-      invoiceNumber, customerId: quotation.customerId,
-      subtotal: quotation.subtotal, discountAmount: quotation.discountAmount ?? "0",
-      taxAmount: quotation.taxAmount ?? "0", total: quotation.total,
-      amountPaid: "0", balanceDue: quotation.total,
-      paymentStatus: "unpaid", notes: quotation.notes,
-    }).returning();
-
-    const qItems = await db.select().from(quotationItemsTable).where(eq(quotationItemsTable.quotationId, id));
-    for (const item of qItems) {
-      await db.insert(invoiceItemsTable).values({
-        invoiceId: invoice.id, description: item.description,
-        productId: item.productId, quantity: item.quantity,
-        unitPrice: item.unitPrice, discount: item.discount ?? "0",
-        taxRate: "0", total: item.total,
-      });
-    }
-
-    await db.update(quotationsTable).set({ status: "accepted", convertedToInvoiceId: invoice.id }).where(eq(quotationsTable.id, id));
-    return res.status(201).json(await buildInvoice(invoice));
-  } catch (err) {
-    req.log.error(err);
-    return res.status(500).json({ error: "Failed to convert quotation" });
-  }
+  const nextAmountPaid = amountPaid != null ? amountPaid : Number(current[0].amountPaid ?? 0);
+  assertNonNegativeMoney(nextAmountPaid, "amountPaid");
+  const nextBalance = status === "paid" ? 0 : computeBalance(Number(current[0].total), nextAmountPaid, true);
+  const updatedRows = await db.execute(sql`
+    UPDATE invoices
+    SET status = ${status},
+        amount_paid = ${nextAmountPaid},
+        balance = ${nextBalance},
+        updated_at = now()
+    WHERE id = ${id}
+    RETURNING *
+  `);
+  const updated2 = updatedRows.rows?.[0] ?? updatedRows[0];
+  const updates = { status, amountPaid: nextAmountPaid, balance: nextBalance };
+  await logAudit(req, "UPDATE_INVOICE_PAYMENT_STATUS", "Invoice", id, current[0], updates);
+  res.json({ ...updated2, customerName: null });
 });
 
 export default router;

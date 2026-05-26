@@ -1,0 +1,59 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: pajoy
+      POSTGRES_USER: pajoy
+      POSTGRES_PASSWORD: pajoypassword
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5433:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pajoy"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+
+  api:
+    build:
+      context: .
+      dockerfile: artifacts/api-server/Dockerfile
+    restart: unless-stopped
+    env_file:
+      - ./artifacts/api-server/.env
+    volumes:
+      - uploads_data:/app/uploads
+      - backups_data:/app/backups
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+
+  frontend:
+    build:
+      context: .
+      dockerfile: artifacts/pajoy/Dockerfile
+    restart: unless-stopped
+    ports:
+      - "3000:80"
+    depends_on:
+      - api
+
+volumes:
+  postgres_data:
+  redis_data:
+  uploads_data:
+  backups_data:
