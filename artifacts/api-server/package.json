@@ -3,6 +3,10 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
+  "files": [
+    "dist",
+    "package.json"
+  ],
   "scripts": {
     "dev": "tsx --watch src/index.ts",
     "build": "node ./build.mjs",

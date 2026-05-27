@@ -1,0 +1,15 @@
+# Copy to:  C:\Users\<YourUser>\.wslconfig
+# Then run:  wsl --shutdown
+# Reopen your Ubuntu distro.
+
+[wsl2]
+# Allocate enough RAM for Docker Desktop + Node + pnpm (adjust to your machine)
+memory=8GB
+processors=4
+swap=4GB
+
+# Faster networking between Windows host and WSL services
+localhostForwarding=true
+
+# Optional: limit WSL virtual disk growth (requires WSL 2.0+ on recent Windows)
+# vmIdleTimeout=60000

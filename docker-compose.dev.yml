@@ -1,0 +1,32 @@
+# Local development overlay — infra in Docker, API + Vite on the host (WSL2).
+#
+#   export DOCKER_BUILDKIT=1
+#   docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d postgres redis
+#   pnpm install --frozen-lockfile
+#   pnpm setup:env
+#   pnpm dev:api    # terminal 1
+#   pnpm dev:web    # terminal 2
+#
+# Optional: run API/frontend in Docker with profiles:
+#   docker compose -f docker-compose.yml -f docker-compose.dev.yml --profile docker-api --profile docker-frontend up -d
+
+services:
+  postgres:
+    ports:
+      - "${POSTGRES_PORT:-5433}:5432"
+
+  redis:
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+
+  api:
+    profiles: ["docker-api"]
+    build:
+      context: .
+      dockerfile: artifacts/api-server/Dockerfile
+
+  frontend:
+    profiles: ["docker-frontend"]
+    build:
+      context: .
+      dockerfile: artifacts/pajoy/Dockerfile

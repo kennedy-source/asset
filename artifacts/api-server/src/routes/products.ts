@@ -4,7 +4,8 @@ import { db } from "@workspace/db";
 import { productsTable, categoriesTable } from "@workspace/db";
 import { eq, and, lte, ilike, sql, now } from "drizzle-orm";
 import { CreateProductBody, ListProductsQueryParams } from "@workspace/api-zod";
-import { requireAuth } from "../middlewares/auth";
+import { requireAuth, requireRole } from "../middlewares/auth";
+import { roles } from "../lib/rbac";
 import { parsePaginationQuery, resolvePagination } from "../lib/pagination";
 
 const router = Router();
@@ -143,7 +144,7 @@ router.get("/", async (req, res): Promise<void> => {
   });
 });
 
-router.post("/", async (req, res): Promise<void> => {
+router.post("/", requireRole(...roles.management), async (req, res): Promise<void> => {
   const normalized = normalizeProductBody(req.body);
   const parsed = CreateProductBody.safeParse(normalized.api);
   if (!parsed.success) {
@@ -238,7 +239,10 @@ router.get("/:id/variants", async (req, res): Promise<void> => {
   res.json({ items: result.rows ?? result });
 });
 
-router.post("/:id/variants", async (req, res): Promise<void> => {
+router.post(
+  "/:id/variants",
+  requireRole(...roles.management),
+  async (req, res): Promise<void> => {
   const id = parseInt(req.params.id);
   if (isNaN(id)) {
     res.status(400).json({ error: "Invalid id" });
@@ -269,7 +273,7 @@ router.post("/:id/variants", async (req, res): Promise<void> => {
   res.status(201).json((result.rows ?? result)[0]);
 });
 
-router.patch("/:id", async (req, res): Promise<void> => {
+router.patch("/:id", requireRole(...roles.management), async (req, res): Promise<void> => {
   const id = parseInt(req.params.id);
   if (isNaN(id)) {
     res.status(400).json({ error: "Invalid id" });
@@ -333,7 +337,7 @@ router.patch("/:id", async (req, res): Promise<void> => {
   }
 });
 
-router.delete("/:id", async (req, res): Promise<void> => {
+router.delete("/:id", requireRole(...roles.management), async (req, res): Promise<void> => {
   const id = parseInt(req.params.id);
   if (isNaN(id)) {
     res.status(400).json({ error: "Invalid id" });

@@ -1,38 +1,107 @@
 # PAJOY Smart Business System
 
-## Local Windows + Docker Setup
+Monorepo: **pnpm workspaces**, **TypeScript**, **Vite/React** frontend (`artifacts/pajoy`), **Express** API (`artifacts/api-server`), **Drizzle ORM**, **Docker Compose**.
 
-### Requirements
-- Docker Desktop installed
-- Docker Compose available
-- Windows command prompt or PowerShell
+For a new **Windows + WSL2 + Docker Desktop** machine, follow **[docs/WSL-SETUP.md](docs/WSL-SETUP.md)** (recommended).
 
-### Quick start
-1. Open a terminal in the repository root.
-2. Run `setup.bat`.
-3. Wait for the services to start.
-4. Open `http://localhost:3000`.
+## Quick start
 
-### Default credentials
+### WSL2 / Linux (recommended)
+
+```bash
+git clone <repo-url> ~/projects/Asset-Manager
+cd ~/projects/Asset-Manager
+bash scripts/setup.sh
+```
+
+Open http://localhost:3000
+
+### Windows (Docker only)
+
+```bat
+setup.bat
+```
+
+## Requirements
+
+| Tool | Version |
+|------|---------|
+| Node.js | 22.x (`.nvmrc`) |
+| pnpm | 10.12+ (`packageManager` in `package.json`) |
+| Docker Desktop | With WSL2 backend |
+
+Enable BuildKit:
+
+```bash
+export DOCKER_BUILDKIT=1
+export COMPOSE_DOCKER_CLI_BUILD=1
+```
+
+## Default credentials
+
 - Email: `admin@pajoy.co.ke`
 - Password: `Admin@1234`
 
-> Please change the password after first login.
+Change the password after first login.
 
-### Services
-- Frontend: `http://localhost:3000`
-- API: `http://localhost:8080`
-- Postgres: `localhost:5432`
-- Redis: `localhost:6379`
+## Services (Docker Compose)
 
-### Commands
-- Start services: `start.bat`
-- Stop services: `stop.bat`
-- Rebuild and start: `docker-compose up -d --build`
-- Health check: `curl http://localhost:8080/api/healthz`
+| Service | URL / port |
+|---------|------------|
+| Frontend | http://localhost:3000 |
+| API | http://localhost:8080 |
+| Health | http://localhost:8080/api/healthz |
+| Postgres | `localhost:5433` → container `5432` |
+| Redis | `localhost:6379` |
 
-### Notes
-- `artifacts/api-server/.env` contains the backend environment settings.
-- `artifacts/pajoy/.env` contains frontend build settings.
-- The frontend is served by nginx and proxies `/api` to the backend.
-- The API server runs migrations and seeds default data on startup.
+## Environment files
+
+| File | Purpose |
+|------|---------|
+| `.env.example` | Compose port/password overrides |
+| `artifacts/api-server/.env.example` | API secrets, DB, Paystack |
+| `artifacts/pajoy/.env.example` | Vite build-time variables |
+
+Create locals (never commit):
+
+```bash
+pnpm setup:env
+```
+
+## Common commands
+
+```bash
+pnpm install --frozen-lockfile   # install deps
+pnpm typecheck                   # TS check
+pnpm build                       # build all packages
+pnpm dev:api                     # API on :8080 (host)
+pnpm dev:web                     # Vite on :5173 (host)
+pnpm docker:up                   # start compose stack
+pnpm docker:down                 # stop stack
+docker compose logs -f api       # follow API logs
+```
+
+Makefile shortcuts: `make setup`, `make dev`, `make docker-rebuild`.
+
+## Project layout
+
+```
+artifacts/
+  api-server/     Express API + Dockerfile
+  pajoy/          React/Vite app + nginx Dockerfile
+lib/
+  db/             Drizzle schema
+  api-zod/        Shared Zod types
+  api-client-react/
+scripts/          seed, setup helpers
+docker/           entrypoints
+```
+
+## Documentation
+
+- [WSL2 setup, specs, troubleshooting](docs/WSL-SETUP.md)
+- [.wslconfig example](.wslconfig.example)
+
+## Security
+
+Do not commit `.env` files. Use strong `JWT_SECRET` and database passwords in production.

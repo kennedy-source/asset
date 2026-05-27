@@ -2,14 +2,27 @@
 
 # compiled output
 dist
+build
 tmp
 out-tsc
 *.tsbuildinfo
+**/dist
+**/build
 .expo
 .expo-shared
 
 # dependencies
 node_modules
+.pnpm-store
+**/.pnpm-store
+
+# environment (never commit secrets)
+.env
+.env.local
+.env.*.local
+**/.env
+!**/.env.example
+!.env.example
 
 # IDEs and editors
 /.idea
@@ -44,6 +57,12 @@ Thumbs.db
 .cursor/rules/nx-rules.mdc
 .github/instructions/nx.instructions.md
 
-# Replit
+# Replit / local runtime
 .cache/
 .local/
+attached_assets/
+errors.log
+*.log
+
+# Docker local overrides (optional)
+docker-compose.override.yml

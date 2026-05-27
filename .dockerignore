@@ -1,11 +1,75 @@
+# Git and IDE
+.git
+.github
+.cursor
+.vscode
+.idea
+*.md
+!README.md
+
+# Dependencies and build outputs (rebuilt inside Docker)
 node_modules
 **/node_modules
+.pnpm-store
+**/.pnpm-store
 dist
 **/dist
-.git
-.gitignore
-pnpm-debug.log*
-*.log
-.DS_Store
+**/.turbo
+**/.vite
+**/*.tsbuildinfo
+**/coverage
+
+# Environment and secrets (mounted or injected at runtime)
 .env
+.env.*
 **/.env
+**/.env.*
+!.env.example
+!**/.env.example
+
+# Logs and local runtime data
+*.log
+errors.log
+**/*.db
+**/*.db-*
+**/uploads
+**/backups
+.cache
+.local
+
+# OS and editor
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+
+# Replit / local tooling
+.replit
+**/.replit-artifact
+attached_assets
+
+# Mockup sandbox not needed for api/pajoy production images
+artifacts/mockup-sandbox
+
+# Tests and dev-only assets
+**/__tests__
+**/*.test.ts
+**/*.spec.ts
+artifacts/api-server/test
+
+# Reduce context size
+docs
+FINAL_MIGRATION_REPORT.md
+scripts/src
+scripts/validate-workspace.mjs
+scripts/health-check.mjs
+scripts/ensure-env.mjs
+*.bat
+Makefile
+.gitattributes
+.editorconfig
+
+# Local databases and uploads (runtime volumes)
+**/*.sqlite
+**/*.sqlite3
+**/pajoy.db

@@ -1,3 +1,4 @@
 @echo off
- docker-compose down
- echo PAJOY stopped.
+cd /d "%~dp0"
+docker compose down
+echo PAJOY stopped.

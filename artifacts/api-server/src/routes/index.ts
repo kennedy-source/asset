@@ -52,7 +52,7 @@ router.use(
 router.use(
   "/products",
   requireAuth,
-  requireRole(...roles.management),
+  requireRole(...roles.staff),
   productsRouter,
 );
 router.use(

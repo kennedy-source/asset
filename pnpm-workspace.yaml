@@ -30,7 +30,6 @@ minimumReleaseAge: 1440
 packages:
   - artifacts/*
   - lib/*
-  - lib/integrations/*
   - scripts
 
 catalog:
@@ -150,7 +149,7 @@ overrides:
   esbuild: "0.27.3"
 
 allowBuilds:
-  better-sqlite3: set this to true or false
+  better-sqlite3: true
   esbuild: true
-  lzma-native: set this to true or false
-  protobufjs: set this to true or false
+  lzma-native: true
+  protobufjs: true

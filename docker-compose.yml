@@ -1,28 +1,44 @@
+# PAJOY stack — use with Docker Compose v2 + BuildKit enabled.
+# WSL2: clone the repo inside ~/projects (Linux filesystem), not /mnt/c.
+
+name: pajoy
+
 services:
   postgres:
     image: postgres:16-alpine
     restart: unless-stopped
     environment:
-      POSTGRES_DB: pajoy
-      POSTGRES_USER: pajoy
-      POSTGRES_PASSWORD: pajoypassword
+      POSTGRES_DB: ${POSTGRES_DB:-pajoy}
+      POSTGRES_USER: ${POSTGRES_USER:-pajoy}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-pajoypassword}
     volumes:
       - postgres_data:/var/lib/postgresql/data
     ports:
-      - "5433:5432"
+      - "${POSTGRES_PORT:-5433}:5432"
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U pajoy"]
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U ${POSTGRES_USER:-pajoy} -d ${POSTGRES_DB:-pajoy}",
+        ]
       interval: 5s
       timeout: 5s
-      retries: 10
+      retries: 12
+      start_period: 10s
 
   redis:
     image: redis:7-alpine
     restart: unless-stopped
+    command: redis-server --appendonly yes
     ports:
-      - "6379:6379"
+      - "${REDIS_PORT:-6379}:6379"
     volumes:
       - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
 
   api:
     build:
@@ -31,26 +47,47 @@ services:
     restart: unless-stopped
     env_file:
       - ./artifacts/api-server/.env
+    environment:
+      NODE_ENV: production
+      DB_PROVIDER: postgres
+      DATABASE_URL: postgresql://${POSTGRES_USER:-pajoy}:${POSTGRES_PASSWORD:-pajoypassword}@postgres:5432/${POSTGRES_DB:-pajoy}
+      REDIS_URL: redis://redis:6379
+      PORT: "8080"
     volumes:
       - uploads_data:/app/uploads
       - backups_data:/app/backups
     ports:
-      - "8080:8080"
+      - "${API_PORT:-8080}:8080"
     depends_on:
       postgres:
         condition: service_healthy
       redis:
-        condition: service_started
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8080/api/healthz"]
+      interval: 15s
+      timeout: 5s
+      retries: 8
+      start_period: 90s
 
   frontend:
     build:
       context: .
       dockerfile: artifacts/pajoy/Dockerfile
+      args:
+        VITE_API_URL: ${VITE_API_URL:-}
     restart: unless-stopped
     ports:
-      - "3000:80"
+      - "${FRONTEND_PORT:-3000}:80"
     depends_on:
-      - api
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
 
 volumes:
   postgres_data:
