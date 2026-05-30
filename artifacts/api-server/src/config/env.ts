@@ -13,21 +13,17 @@ if (fs.existsSync(envFile)) {
   );
 }
 
+const rawNodeEnv = process.env.NODE_ENV ?? "development";
+const nodeEnv = parseNodeEnv(rawNodeEnv);
 if (!process.env.NODE_ENV) {
-  process.env.NODE_ENV = "development";
-}
-
-if (process.env.NODE_ENV !== "production") {
-  process.env.DB_PROVIDER ??= "sqlite";
-  process.env.SQLITE_FILE_PATH ??= "./pajoy.db";
-  process.env.PORT ??= "8080";
-  process.env.CORS_ORIGIN ??= "http://localhost:5173,http://127.0.0.1:5173";
-  process.env.JWT_SECRET ??= "test-secret";
+  console.warn(
+    "[BACKEND STARTUP] NODE_ENV is not set; defaulting to development. Set NODE_ENV explicitly for production deployments.",
+  );
 }
 
 console.log("[BACKEND STARTUP] env loader initialized", {
   envFile,
-  NODE_ENV: process.env.NODE_ENV,
+  NODE_ENV: nodeEnv,
   DB_PROVIDER: process.env.DB_PROVIDER,
   DATABASE_URL: process.env.DATABASE_URL,
   SQLITE_FILE_PATH: process.env.SQLITE_FILE_PATH,
@@ -69,8 +65,6 @@ function parseOrigins(value: string): string[] {
     .filter(Boolean);
 }
 
-const nodeEnv = parseNodeEnv(required("NODE_ENV"));
-
 function parseBoolean(raw: string | undefined, fallback: boolean): boolean {
   if (!raw) return fallback;
   return ["1", "true", "yes", "on"].includes(raw.toLowerCase());
@@ -89,13 +83,9 @@ const corsOriginRaw = optional("CORS_ORIGIN");
 let corsOrigin: string[];
 if (!corsOriginRaw) {
   if (nodeEnv === "production") {
-    console.warn(
-      "CORS_ORIGIN is not set in production. Allowing all origins via '*'",
-    );
-    corsOrigin = ["*"];
-  } else {
-    corsOrigin = parseOrigins(defaultDevOrigins);
+    throw new Error("CORS_ORIGIN is required in production and must be explicitly configured.");
   }
+  corsOrigin = parseOrigins(defaultDevOrigins);
 } else {
   corsOrigin = parseOrigins(corsOriginRaw);
 }
@@ -137,12 +127,17 @@ export const env = {
   anthropicApiKey: optional("ANTHROPIC_API_KEY") ?? null,
   paystackSecretKey: optional("PAYSTACK_SECRET_KEY") ?? null,
   paystackWebhookSecret: optional("PAYSTACK_WEBHOOK_SECRET") ?? null,
-  paystackCallbackUrl: optional("PAYSTACK_CALLBACK_URL") ?? "http://localhost:3000/payments/status",
+  paystackCallbackUrl: optional("PAYSTACK_CALLBACK_URL") ?? null,
   paystackApiUrl: optional("PAYSTACK_BASE_URL") ?? "https://api.paystack.co",
+  seedStartupData: parseBoolean(optional("ENABLE_STARTUP_SEEDING"), false),
 };
 
+if (env.isProduction && env.paystackSecretKey && !env.paystackCallbackUrl) {
+  throw new Error("PAYSTACK_CALLBACK_URL is required when PAYSTACK_SECRET_KEY is configured.");
+}
+
 if (Number.isNaN(env.port) || env.port <= 0) {
-  throw new Error(`Invalid PORT value "${process.env.PORT}"`);
+  throw new Error(`Invalid PORT value "${process.env.PORT ?? String(env.port)}"`);
 }
 if (Number.isNaN(env.syncWorkerIntervalMs) || env.syncWorkerIntervalMs < 1000) {
   throw new Error(

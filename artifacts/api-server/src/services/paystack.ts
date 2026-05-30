@@ -58,7 +58,14 @@ export async function initiatePaystackPayment(input: InitiatePaystackPaymentInpu
 
   const reference = normalizeReference(input.reference);
   const currency = (input.currency ?? "NGN").toUpperCase();
-  const email = input.email ?? "no-reply@example.com";
+  if (!input.email || !/\S+@\S+\.\S+/.test(input.email)) {
+    throw new AppError(
+      400,
+      "VALIDATION_ERROR",
+      "A valid customer email address is required for Paystack payment initialization.",
+    );
+  }
+  const email = input.email;
 
   if (!input.amount || input.amount <= 0) {
     throw new AppError(400, "VALIDATION_ERROR", "Amount must be greater than zero");

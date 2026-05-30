@@ -49,7 +49,6 @@ Thumbs.db
 attached_assets
 
 # Mockup sandbox not needed for api/pajoy production images
-artifacts/mockup-sandbox
 
 # Tests and dev-only assets
 **/__tests__

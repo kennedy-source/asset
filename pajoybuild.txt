@@ -1,0 +1,143 @@
+#0 building with "desktop-linux" instance using docker driver
+
+#1 [internal] load build definition from Dockerfile
+#1 transferring dockerfile:
+#1 transferring dockerfile: 2.14kB 0.1s done
+#1 DONE 0.2s
+
+#2 resolve image config for docker-image://docker.io/docker/dockerfile:1.7
+#2 DONE 2.5s
+
+#3 docker-image://docker.io/docker/dockerfile:1.7@sha256:a57df69d0ea827fb7266491f2813635de6f17269be881f696fbfdf2d83dda33e
+#3 resolve docker.io/docker/dockerfile:1.7@sha256:a57df69d0ea827fb7266491f2813635de6f17269be881f696fbfdf2d83dda33e
+#3 resolve docker.io/docker/dockerfile:1.7@sha256:a57df69d0ea827fb7266491f2813635de6f17269be881f696fbfdf2d83dda33e 0.4s done
+#3 DONE 0.5s
+
+#3 docker-image://docker.io/docker/dockerfile:1.7@sha256:a57df69d0ea827fb7266491f2813635de6f17269be881f696fbfdf2d83dda33e
+#3 CACHED
+
+#4 [internal] load metadata for docker.io/library/node:22-bookworm-slim
+#4 DONE 3.2s
+
+#5 [internal] load .dockerignore
+#5 transferring context:
+#5 transferring context: 1.15kB 0.1s done
+#5 DONE 0.8s
+
+#6 [internal] load build context
+#6 DONE 0.0s
+
+#7 [base 1/3] FROM docker.io/library/node:22-bookworm-slim@sha256:7af03b14a13c8cdd38e45058fd957bf00a72bbe17feac43b1c15a689c029c732
+#7 resolve docker.io/library/node:22-bookworm-slim@sha256:7af03b14a13c8cdd38e45058fd957bf00a72bbe17feac43b1c15a689c029c732
+#7 resolve docker.io/library/node:22-bookworm-slim@sha256:7af03b14a13c8cdd38e45058fd957bf00a72bbe17feac43b1c15a689c029c732 1.4s done
+#7 DONE 1.6s
+
+#6 [internal] load build context
+#6 transferring context: 777B 0.2s done
+#6 DONE 0.8s
+
+#8 [base 3/3] WORKDIR /app
+#8 CACHED
+
+#9 [deps 6/9] COPY lib/api-client-react/package.json ./lib/api-client-react/
+#9 CACHED
+
+#10 [deps 1/9] COPY package.json pnpm-workspace.yaml pnpm-lock.yaml .npmrc tsconfig.base.json ./
+#10 CACHED
+
+#11 [deps 4/9] COPY lib/db/package.json ./lib/db/
+#11 CACHED
+
+#12 [deps 5/9] COPY lib/api-zod/package.json ./lib/api-zod/
+#12 CACHED
+
+#13 [deps 2/9] COPY artifacts/pajoy/package.json ./artifacts/pajoy/
+#13 CACHED
+
+#14 [deps 3/9] COPY artifacts/api-server/package.json ./artifacts/api-server/
+#14 CACHED
+
+#15 [deps 7/9] COPY lib/api-spec/package.json ./lib/api-spec/
+#15 CACHED
+
+#16 [base 2/3] RUN apt-get update   && apt-get install -y --no-install-recommends python3 make g++ ca-certificates   && rm -rf /var/lib/apt/lists/*   && corepack enable   && corepack prepare "pnpm@${PNPM_VERSION}" --activate
+#16 CACHED
+
+#17 [deps 8/9] COPY scripts/package.json ./scripts/
+#17 CACHED
+
+#18 [deps 9/9] RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store   pnpm install --frozen-lockfile --filter @workspace/pajoy...
+#18 7.468 ! Corepack is about to download https://registry.npmjs.org/pnpm/-/pnpm-10.12.4.tgz
+#18 11.63 Scope: 2 of 8 workspace projects
+#18 11.77 Lockfile is up to date, resolution step is skipped
+#18 11.82 Progress: resolved 1, reused 0, downloaded 0, added 0
+#18 11.87 .                                        | +234 +++++++++++++++++++++++
+#18 12.82 Progress: resolved 234, reused 104, downloaded 0, added 0
+#18 12.88 
+#18 12.88    ╭──────────────────────────────────────────────╮
+#18 12.88    │                                              │
+#18 12.88    │     Update available! 10.12.4 → 11.3.0.      │
+#18 12.88    │     Changelog: https://pnpm.io/v/11.3.0      │
+#18 12.88    │   To update, run: corepack use pnpm@11.3.0   │
+#18 12.88    │                                              │
+#18 12.88    ╰──────────────────────────────────────────────╯
+#18 12.88 
+#18 13.82 Progress: resolved 234, reused 178, downloaded 0, added 0
+#18 14.83 Progress: resolved 234, reused 199, downloaded 0, added 0
+#18 15.83 Progress: resolved 234, reused 234, downloaded 0, added 3
+#18 16.83 Progress: resolved 234, reused 234, downloaded 0, added 7
+#18 17.83 Progress: resolved 234, reused 234, downloaded 0, added 13
+#18 18.83 Progress: resolved 234, reused 234, downloaded 0, added 20
+#18 19.83 Progress: resolved 234, reused 234, downloaded 0, added 35
+#18 20.84 Progress: resolved 234, reused 234, downloaded 0, added 80
+#18 21.84 Progress: resolved 234, reused 234, downloaded 0, added 100
+#18 22.84 Progress: resolved 234, reused 234, downloaded 0, added 106
+#18 23.84 Progress: resolved 234, reused 234, downloaded 0, added 108
+#18 24.84 Progress: resolved 234, reused 234, downloaded 0, added 113
+#18 25.83 Progress: resolved 234, reused 234, downloaded 0, added 126
+#18 26.83 Progress: resolved 234, reused 234, downloaded 0, added 133
+#18 27.84 Progress: resolved 234, reused 234, downloaded 0, added 140
+#18 28.84 Progress: resolved 234, reused 234, downloaded 0, added 159
+#18 29.84 Progress: resolved 234, reused 234, downloaded 0, added 174
+#18 30.86 Progress: resolved 234, reused 234, downloaded 0, added 175
+#18 31.86 Progress: resolved 234, reused 234, downloaded 0, added 184
+#18 35.17 Progress: resolved 234, reused 234, downloaded 0, added 185
+#18 36.17 Progress: resolved 234, reused 234, downloaded 0, added 189
+#18 39.93 Progress: resolved 234, reused 234, downloaded 0, added 190
+#18 41.52 Progress: resolved 234, reused 234, downloaded 0, added 191
+#18 42.52 Progress: resolved 234, reused 234, downloaded 0, added 195
+#18 53.10 Progress: resolved 234, reused 234, downloaded 0, added 196
+#18 57.24 Progress: resolved 234, reused 234, downloaded 0, added 197
+#18 58.24 Progress: resolved 234, reused 234, downloaded 0, added 201
+#18 59.57 Progress: resolved 234, reused 234, downloaded 0, added 202
+#18 60.57 Progress: resolved 234, reused 234, downloaded 0, added 203
+#18 61.57 Progress: resolved 234, reused 234, downloaded 0, added 211
+#18 62.57 Progress: resolved 234, reused 234, downloaded 0, added 219
+#18 63.57 Progress: resolved 234, reused 234, downloaded 0, added 228
+#18 64.58 Progress: resolved 234, reused 234, downloaded 0, added 230
+#18 66.37 Progress: resolved 234, reused 234, downloaded 0, added 231
+#18 67.37 Progress: resolved 234, reused 234, downloaded 0, added 232
+#18 68.37 Progress: resolved 234, reused 234, downloaded 0, added 233
+#18 74.02 Progress: resolved 234, reused 234, downloaded 0, added 234
+#18 74.02 Progress: resolved 234, reused 234, downloaded 0, added 234, done
+#18 76.02 . preinstall$ node -e "const fs = require('fs'); ['package-lock.json', 'yarn.lock'].forEach(f => { try { fs.unlinkSync(f) } catch {} });"
+#18 76.61 . preinstall: Done
+#18 76.76 Done in 1m 5.8s using pnpm v10.12.4
+#18 DONE 79.7s
+
+#19 exporting to image
+#19 exporting layers
+#19 exporting layers 355.3s done
+#19 exporting manifest sha256:82d433b5d939bdfb3dd363326b70348df70dea8d1059e750f1168d83779416b3
+#19 exporting manifest sha256:82d433b5d939bdfb3dd363326b70348df70dea8d1059e750f1168d83779416b3 1.0s done
+#19 exporting config sha256:3f7e5e9967c9c484ff7a825abb17ecc24c4ae2c04884800f78c0b98069890a87
+#19 exporting config sha256:3f7e5e9967c9c484ff7a825abb17ecc24c4ae2c04884800f78c0b98069890a87 1.4s done
+#19 exporting attestation manifest sha256:116308cde6c7502e4bd59a8371dd2707f73397355972ccb99e6d2a42c886916b
+#19 exporting attestation manifest sha256:116308cde6c7502e4bd59a8371dd2707f73397355972ccb99e6d2a42c886916b 2.5s done
+#19 exporting manifest list sha256:bba853b5d6a27782d074900182627bf813befa2b88b17fb9e9483ec369f2b7b9
+#19 exporting manifest list sha256:bba853b5d6a27782d074900182627bf813befa2b88b17fb9e9483ec369f2b7b9 1.1s done
+#19 naming to docker.io/library/asset-pajoy-deps:latest
+#19 naming to docker.io/library/asset-pajoy-deps:latest 0.1s done
+#19 unpacking to docker.io/library/asset-pajoy-deps:latest
+#19 unpacking to docker.io/library/asset-pajoy-deps:latest 36.8s done
+#19 DONE 399.9s

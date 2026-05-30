@@ -11,10 +11,10 @@ export async function desktopApiJson<T = unknown>(
 ): Promise<T> {
   const normalized: DesktopApiRequest =
     typeof request === "string" ? { url: request, ...(init ?? {}) } : request;
-  const apiUrl = import.meta.env.VITE_API_URL || "http://localhost:8080";
+  const apiUrl = import.meta.env.VITE_API_URL ?? window.location.origin;
   const url = normalized.url.startsWith("http")
     ? normalized.url
-    : `${apiUrl}${normalized.url}`;
+    : `${apiUrl}${normalized.url.startsWith("/") ? "" : "/"}${normalized.url}`;
   const token = localStorage.getItem("pajoy_token");
   const headers = {
     ...(normalized.body != null ? { "Content-Type": "application/json" } : {}),

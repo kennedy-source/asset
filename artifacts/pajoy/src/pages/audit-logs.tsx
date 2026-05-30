@@ -40,7 +40,7 @@ function useListAuditLogs(page: number, limit: number) {
   return useQuery<AuditLogsResponse>({
     queryKey: ["audit-logs", page, limit],
     queryFn: async () => {
-      const apiUrl = import.meta.env.VITE_API_URL || "http://localhost:8080";
+      const apiUrl = import.meta.env.VITE_API_URL ?? window.location.origin;
       const token = localStorage.getItem("pajoy_token");
       const res = await fetch(`${apiUrl}/api/audit-logs?page=${page}&limit=${limit}`, {
         headers: token ? { Authorization: `Bearer ${token}` } : undefined,

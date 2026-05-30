@@ -11,7 +11,7 @@ import { useToast } from "@/hooks/use-toast";
 import { getValidSessionToken } from "@/lib/auth";
 import { Boxes, Layers3, PackagePlus, Palette, Plus, Ruler, Search, Shirt, Tag } from "lucide-react";
 
-const apiUrl = import.meta.env.VITE_API_URL || "http://localhost:8080";
+const apiUrl = import.meta.env.VITE_API_URL ?? window.location.origin;
 
 async function apiJson(path: string, init?: RequestInit) {
   const token = getValidSessionToken();

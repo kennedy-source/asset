@@ -27,7 +27,6 @@ FROM base AS deps
 COPY package.json pnpm-workspace.yaml pnpm-lock.yaml .npmrc tsconfig.base.json ./
 COPY artifacts/pajoy/package.json ./artifacts/pajoy/
 COPY artifacts/api-server/package.json ./artifacts/api-server/
-COPY artifacts/mockup-sandbox/package.json ./artifacts/mockup-sandbox/
 COPY lib/db/package.json ./lib/db/
 COPY lib/api-zod/package.json ./lib/api-zod/
 COPY lib/api-client-react/package.json ./lib/api-client-react/
@@ -62,3 +61,4 @@ HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
   CMD wget -qO- http://127.0.0.1/ >/dev/null 2>&1 || exit 1
 
 EXPOSE 80
+

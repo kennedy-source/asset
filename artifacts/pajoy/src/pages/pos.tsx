@@ -63,6 +63,7 @@ export default function POS() {
   const [paymentMethod, setPaymentMethod] = useState("CASH");
   const [amountPaid, setAmountPaid] = useState("");
   const [buyerPhone, setBuyerPhone] = useState("");
+  const [buyerEmail, setBuyerEmail] = useState("");
   const [discount, setDiscount] = useState(0);
 
   useEffect(() => {
@@ -151,6 +152,9 @@ export default function POS() {
     );
   };
 
+  const selectedCustomer = customers.find((c) => String(c.id) === customerId);
+  const paymentEmail = selectedCustomer?.email || buyerEmail;
+
   const handleCheckout = () => {
     if (cart.length === 0) {
       toast({ variant: "destructive", title: "Cart is empty" });
@@ -162,6 +166,10 @@ export default function POS() {
     }
     if (paymentMethod === "PAYSTACK" && buyerPhone.trim().length < 9) {
       toast({ variant: "destructive", title: "Enter buyer phone number" });
+      return;
+    }
+    if (paymentMethod === "PAYSTACK" && !/\S+@\S+\.\S+/.test(paymentEmail)) {
+      toast({ variant: "destructive", title: "Enter a valid buyer email for Paystack payments" });
       return;
     }
     createSale.mutate(
@@ -186,7 +194,7 @@ export default function POS() {
         onSuccess: async (sale) => {
           if (paymentMethod === "PAYSTACK") {
             try {
-              const apiUrl = import.meta.env.VITE_API_URL || "http://localhost:8080";
+              const apiUrl = import.meta.env.VITE_API_URL ?? window.location.origin;
               const response = await fetch(`${apiUrl}/api/payments/initiate`, {
                 method: "POST",
                 headers: {
@@ -199,7 +207,7 @@ export default function POS() {
                   amount: total,
                   currency: "KES",
                   phone: buyerPhone,
-                  email: "customer@pajoy.co.ke",
+                  email: paymentEmail,
                 }),
               });
               const payment = await response.json();
@@ -407,17 +415,36 @@ export default function POS() {
           </Select>
 
           {paymentMethod === "PAYSTACK" && (
-            <div>
-              <label className="text-sm text-muted-foreground">
-                Buyer Phone for STK / mobile money
-              </label>
-              <Input
-                value={buyerPhone}
-                onChange={(e) => setBuyerPhone(e.target.value)}
-                className="mt-1"
-                placeholder="2547XXXXXXXX"
-                data-testid="input-buyer-phone"
-              />
+            <div className="space-y-4">
+              <div>
+                <label className="text-sm text-muted-foreground">
+                  Buyer Phone for STK / mobile money
+                </label>
+                <Input
+                  value={buyerPhone}
+                  onChange={(e) => setBuyerPhone(e.target.value)}
+                  className="mt-1"
+                  placeholder="2547XXXXXXXX"
+                  data-testid="input-buyer-phone"
+                />
+              </div>
+              <div>
+                <label className="text-sm text-muted-foreground">
+                  Buyer Email for Paystack receipt
+                </label>
+                <Input
+                  value={buyerEmail}
+                  onChange={(e) => setBuyerEmail(e.target.value)}
+                  className="mt-1"
+                  placeholder="customer@example.com"
+                  data-testid="input-buyer-email"
+                />
+                {selectedCustomer?.email && (
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Using selected customer email: {selectedCustomer.email}
+                  </p>
+                )}
+              </div>
             </div>
           )}
 

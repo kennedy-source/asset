@@ -1,22 +1,22 @@
-import dotenv from "dotenv";
 import path from "path";
 import { fileURLToPath } from "url";
 
-const baseDir = path.dirname(fileURLToPath(import.meta.url));
-const envPath = path.resolve(baseDir, "../.env");
-dotenv.config({ path: envPath });
-
 import fs from "fs";
 import { logger } from "./lib/logger";
+import { env } from "./config/env";
 import { migrate } from "drizzle-orm/node-postgres/migrator";
 import { eq } from "drizzle-orm";
 import { createHash } from "crypto";
 
-const rawPort = process.env["PORT"] || "8080";
-const port = Number(rawPort);
+// ESM __dirname equivalent for migrations resolution
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const baseDir = __dirname;
+
+const port = env.port;
 
 if (Number.isNaN(port) || port <= 0) {
-  throw new Error(`Invalid PORT value: "${rawPort}"`);
+  throw new Error(`Invalid PORT value: "${process.env.PORT ?? String(port)}"`);
 }
 
 function hashPassword(password: string): string {
@@ -677,7 +677,7 @@ async function seedEnterpriseInventoryStructure(pool: any) {
   }
 }
 
-async function resolveMigrationsFolder(): Promise<string | null> {
+async function resolveMigrationsFolder(baseDir: string): Promise<string | null> {
   const explicitFolder = process.env.MIGRATIONS_FOLDER;
   const candidateFolders = [
     { name: "api-server local", folder: path.resolve(baseDir, "../drizzle/migrations") },
@@ -714,7 +714,7 @@ async function resolveMigrationsFolder(): Promise<string | null> {
 async function bootstrap() {
   const { default: app } = await import("./app");
   const { db, pool, usersTable, categoriesTable, settingsTable } = await import("@workspace/db");
-  const migrationsFolder = await resolveMigrationsFolder();
+  const migrationsFolder = await resolveMigrationsFolder(baseDir);
 
   if (migrationsFolder) {
     logger.info("Running database migrations...");
@@ -725,10 +725,14 @@ async function bootstrap() {
   }
 
   await ensureDatabaseCompatibility(pool);
-  await seedDefaultCategories(db, categoriesTable);
-  await seedEnterpriseInventoryStructure(pool);
-  await seedDefaultSettings(db, settingsTable);
-  await seedAdminIfEmpty(db, usersTable);
+  if (env.nodeEnv !== "production" || env.seedStartupData) {
+    await seedDefaultCategories(db, categoriesTable);
+    await seedEnterpriseInventoryStructure(pool);
+    await seedDefaultSettings(db, settingsTable);
+    await seedAdminIfEmpty(db, usersTable);
+  } else {
+    logger.info("Startup data seeding is disabled in production.");
+  }
 
   app.listen(port, (err) => {
     if (err) {

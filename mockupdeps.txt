@@ -1,0 +1,17 @@
+allrefs.txt:2:artifacts\mockup-sandbox\.replit-artifact\artifact.toml:17:run = "pnpm --filter @workspace/mockup-sandbox run dev"
+allrefs.txt:3:artifacts\mockup-sandbox\package.json:2:  "name": "@workspace/mockup-sandbox",
+artifacts\mockup-sandbox\.replit-artifact\artifact.toml:17:run = "pnpm --filter @workspace/mockup-sandbox run dev"
+artifacts\mockup-sandbox\package.json:2:  "name": "@workspace/mockup-sandbox",
+filters.txt:1:allrefs.txt:2:artifacts\mockup-sandbox\.replit-artifact\artifact.toml:17:run = "pnpm --filter @workspace/mockup-sandbox run dev"
+filters.txt:6:artifacts\mockup-sandbox\.replit-artifact\artifact.toml:17:run = "pnpm --filter @workspace/mockup-sandbox run dev"
+result.txt:1:artifacts\mockup-sandbox\package.json:2:  "name": "@workspace/mockup-sandbox",
+search.txt:3:artifacts\mockup-sandbox\.replit-artifact\artifact.toml:17:run = "pnpm --filter @workspace/mockup-sandbox run dev"
+search.txt:4:artifacts\mockup-sandbox\package.json:2:  "name": "@workspace/mockup-sandbox",
+search_git.txt:7:artifacts\mockup-sandbox\.replit-artifact\artifact.toml:17:run = "pnpm --filter @workspace/mockup-sandbox run dev"
+search_git.txt:31:artifacts\mockup-sandbox\package.json:2:  "name": "@workspace/mockup-sandbox",
+search_git.txt:42:search.txt:3:artifacts\mockup-sandbox\.replit-artifact\artifact.toml:17:run = "pnpm --filter @workspace/mockup-sandbox run dev"
+search_git.txt:43:search.txt:4:artifacts\mockup-sandbox\package.json:2:  "name": "@workspace/mockup-sandbox",
+search_git.txt:52:search_mockup.txt:7:artifacts\mockup-sandbox\.replit-artifact\artifact.toml:17:run = "pnpm --filter @workspace/mockup-sandbox run dev"
+search_git.txt:76:search_mockup.txt:31:artifacts\mockup-sandbox\package.json:2:  "name": "@workspace/mockup-sandbox",
+search_mockup.txt:7:artifacts\mockup-sandbox\.replit-artifact\artifact.toml:17:run = "pnpm --filter @workspace/mockup-sandbox run dev"
+search_mockup.txt:31:artifacts\mockup-sandbox\package.json:2:  "name": "@workspace/mockup-sandbox",

@@ -1,0 +1,6 @@
+.dockerignore:52:artifacts/mockup-sandbox
+artifacts\api-server\Dockerfile:33:COPY artifacts/mockup-sandbox/package.json ./artifacts/mockup-sandbox/
+artifacts\mockup-sandbox\.replit-artifact\artifact.toml:17:run = "pnpm --filter @workspace/mockup-sandbox run dev"
+artifacts\mockup-sandbox\package.json:2:  "name": "@workspace/mockup-sandbox",
+artifacts\pajoy\Dockerfile:30:COPY artifacts/mockup-sandbox/package.json ./artifacts/mockup-sandbox/
+pnpm-lock.yaml:300:  artifacts/mockup-sandbox:
