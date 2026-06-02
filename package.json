@@ -10,6 +10,8 @@
   "scripts": {
     "preinstall": "node -e \"const fs = require('fs'); ['package-lock.json', 'yarn.lock'].forEach(f => { try { fs.unlinkSync(f) } catch {} });\"",
     "build": "pnpm run typecheck && pnpm -r --if-present run build",
+    "start": "pnpm run docker:build && pnpm run docker:up",
+    "build:all": "pnpm run build && pnpm run docker:build",
     "typecheck:libs": "tsc --build",
     "typecheck": "pnpm run typecheck:libs && pnpm -r --filter \"./artifacts/**\" --filter \"./scripts\" --if-present run typecheck",
     "dev:api": "pnpm --filter @workspace/api-server dev",

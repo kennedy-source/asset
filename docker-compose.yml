@@ -49,6 +49,7 @@ services:
       - ./artifacts/api-server/.env
     environment:
       NODE_ENV: production
+      ENABLE_STARTUP_SEEDING: ${ENABLE_STARTUP_SEEDING:-false}
       DB_PROVIDER: postgres
       DATABASE_URL: postgresql://${POSTGRES_USER:-pajoy}:${POSTGRES_PASSWORD:-pajoypassword}@postgres:5432/${POSTGRES_DB:-pajoy}
       REDIS_URL: redis://redis:6379

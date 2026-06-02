@@ -1,4 +1,4 @@
-# syntax=docker/dockerfile:1.7
+# syntax=docker/dockerfile:1
 
 # -----------------------------------------------------------------------------
 # PAJOY API — multi-stage build with pnpm cache mounts and workspace-aware deploy
@@ -68,6 +68,8 @@ WORKDIR /app
 RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store \
   pnpm --filter @workspace/api-server deploy --legacy --prod /deploy/api \
   && cp -a artifacts/api-server/dist /deploy/api/dist \
+  && mkdir -p /deploy/api/drizzle/migrations \
+  && cp -a /app/lib/db/drizzle/migrations/. /deploy/api/drizzle/migrations \
   && test -f /deploy/api/dist/index.mjs
 
 # -----------------------------------------------------------------------------
