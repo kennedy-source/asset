@@ -331,10 +331,15 @@ router.patch("/:id", requireRole(...roles.management), async (req, res): Promise
       return;
     }
     res.json({ ...updated[0], categoryName: null });
-  } catch (error) {
-    console.error("Product update error:", error);
-    res.status(500).json({ error: "Failed to update product", details: String(error) });
-  }
+    } catch (error) {
+      console.error("Product update error:", error);
+
+      res.status(500).json({
+        message: error.message,
+        stack: error.stack,
+        error
+      });
+    }
 });
 
 router.delete("/:id", requireRole(...roles.management), async (req, res): Promise<void> => {
